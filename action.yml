@@ -1,0 +1,22 @@
+name: Django release
+description: Run exact-SHA Schema Maintenance and verify its receipt before deploying the serving application on Railway.
+inputs:
+  policy:
+    description: Path to a version-1 JSON policy in the checked-out caller repository.
+    required: true
+  github-token:
+    description: Caller GITHUB_TOKEN with contents read, actions read, and deployments write.
+    required: true
+  railway-token:
+    description: Railway project token scoped to the consumer environment.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Verify schema then release application
+      shell: bash
+      env:
+        RELEASE_POLICY: ${{ inputs.policy }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        RAILWAY_TOKEN: ${{ inputs.railway-token }}
+      run: python3 -B "$GITHUB_ACTION_PATH/controller.py" --policy "$RELEASE_POLICY"
