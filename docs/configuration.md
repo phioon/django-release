@@ -84,6 +84,41 @@ Target identity changes require a separately reviewed record transition; do not
 rename a consumer prefix to evade unresolved records. There are no environment
 variable substitutions, secret fields, optional command hooks or automatic defaults.
 
+## Policy format 2: schema-only
+
+[policy-v2.schema.json](../schemas/policy-v2.schema.json) requires
+`format_version: 2` and `mode: "schema-only"`. Keep the version-1 repository,
+branch, workflow, consumer, project/environment, schema and ACL-policy fields.
+Replace `application` with `historical_application_service_id`: the exact UUID
+from the prior version-1 application policy, or JSON `null` only for a consumer
+that has never had application records. There are no application process settings
+in this policy. Unknown or omitted fields fail validation.
+
+This mode preflights, lists, submits and observes **only Schema Maintenance** at
+the exact event SHA. It makes zero application-provider calls, including reads.
+Native application deployment settings and serving health are consumer-owned.
+The candidate-tree prohibition and all schema-service isolation requirements
+remain in force. Native applications must safely wait for their own required
+migrations and effective runtime ACLs without migration credentials or writes;
+Maintenance and startup checks need compatible database serialization.
+
+Upgrades preserve both GitHub deployment categories, historical service identities
+and `previous_heads`. Keep the existing workflow path and concurrency group.
+The controller still validates the old application's terminal history and schema
+predecessor; it never recreates, deletes, or rewrites those records. A missing or
+different historical application UUID cannot bypass existing records. Any
+unresolved legacy application outcome blocks schema-only execution, including a
+candidate with the same SHA. Resolve it through the original release's reviewed
+recovery procedure before cutover. An unresolved earlier schema outcome also
+blocks the new candidate. A changed policy cannot resume an existing same-SHA
+schema intent because its policy digest differs.
+
+Record and receipt formats remain version 1, independently of policy version.
+New schema-only records retain both prior heads and the version-2 policy digest.
+Older action pins reject policy version 2: do not downgrade or change identities
+to evade history. New native application deployments create no action-owned
+application records and are not represented as application verification success.
+
 ## Maintenance receipt
 
 The consumer's maintenance process emits one single-line JSON object after its

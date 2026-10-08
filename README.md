@@ -1,14 +1,18 @@
 # Django release
 
 A small GitHub composite action that runs your Django schema preparation on
-Railway, verifies its result, then submits your serving application at the same
-commit. Your workflow controls when it runs and which credentials it receives.
+Railway and verifies its exact-commit result. Policy version 1 then submits your
+serving application at that commit. Explicit version-2 `schema-only` mode leaves
+application deployment to your platform. Your workflow controls when it runs and
+which credentials it receives.
 
 Django migrations describe changes to your database. Deploying code that needs a
 new table before creating that table can break startup. This action separates the
 work: a private, short-lived **Schema Maintenance** service applies reviewed
 migrations and checks database permissions; the normal application deploys only
-after that service produces a verified success receipt.
+after that service produces a verified success receipt in version 1. In schema-only
+mode, your independently deployed application needs its own read-only startup
+compatibility gate; this action neither implements that gate nor checks serving health.
 
 The application uses a limited database role for its everyday queries. Maintenance
 uses a more privileged role because changing tables and granting permissions need
@@ -16,6 +20,12 @@ extra authority. Keep those credentials separate. The action itself receives no
 database password and does not generate migrations or implement your permissions.
 
 ## Before you start
+
+The quickstart below describes the unchanged version-1 two-service mode. For
+native application deployments, use the [version-2 schema-only contract](docs/configuration.md#policy-format-2-schema-only)
+and its upgrade/recovery requirements. Only Schema Maintenance is a provider
+target in that mode; disable native autodeploy on that service. Preserve the
+consumer, workflow, concurrency group and both historical deployment categories.
 
 This first delivery supplies source and offline tests. It is not evidence of a
 working deployment in your account. Qualify the Railway API operations, service
