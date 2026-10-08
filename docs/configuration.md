@@ -53,9 +53,12 @@ Configure both services in Railway's dashboard. Non-null legacy `config` paths
 are unsupported in version 1: matching dashboard values cannot prove effective
 settings when a config file can override them. Before adoption, move your reviewed
 process settings to the dashboard and remove the service's config-file binding.
-Confirm the provider reports `railwayConfigFile: null` and qualify the resulting
-deployment settings in a disposable environment. This action neither reads legacy
-Railway config files nor performs that migration for you.
+Railway may report an absent binding as `railwayConfigFile: null` or the literal
+empty string `""`; the action accepts exactly those two provider representations.
+Whitespace, nonempty paths and other types are rejected. Your committed policy
+must still use `config: null`. Qualify the resulting deployment settings in a
+disposable environment. This action neither reads legacy Railway config files
+nor performs that migration for you.
 
 Railway can also discover `railway.toml` or `railway.json` automatically when the
 explicit config-file binding is null. Version 1 therefore rejects **any committed

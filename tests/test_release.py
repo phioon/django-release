@@ -798,13 +798,36 @@ class ProviderTests(unittest.TestCase):
         with patch.object(self.provider, "query", return_value=result):
             self.provider.preflight("application")
 
-    def test_matching_dashboard_settings_with_config_override_are_rejected(self):
+    def test_null_and_literal_empty_provider_config_bindings_are_absent(self):
         for phase in c.PHASES:
-            result = self.preflight(phase)
-            result["serviceInstance"]["railwayConfigFile"] = "railway.toml"
-            with self.subTest(phase=phase), patch.object(self.provider, "query", return_value=result), \
-                    self.assertRaisesRegex(c.Blocked, "provider-service-config-drift"):
-                self.provider.preflight(phase)
+            for binding in (None, ""):
+                result = self.preflight(phase)
+                result["serviceInstance"]["railwayConfigFile"] = binding
+                with self.subTest(phase=phase, binding=binding), \
+                        patch.object(self.provider, "query", return_value=result):
+                    self.provider.preflight(phase)
+
+    def test_matching_dashboard_settings_with_config_override_or_wrong_type_are_rejected(self):
+        for phase in c.PHASES:
+            for binding in ("railway.toml", ".railway/service.json", " ", "\t", "\n",
+                            False, True, 0, 1, [], {}, [""], {"path": ""}):
+                result = self.preflight(phase)
+                result["serviceInstance"]["railwayConfigFile"] = binding
+                with self.subTest(phase=phase, binding=binding), \
+                        patch.object(self.provider, "query", return_value=result), \
+                        self.assertRaisesRegex(c.Blocked, "provider-service-config-drift"):
+                    self.provider.preflight(phase)
+
+    def test_absent_provider_config_does_not_relax_null_consumer_policy(self):
+        for phase in c.PHASES:
+            for binding in (None, ""):
+                result = self.preflight(phase)
+                result["serviceInstance"]["railwayConfigFile"] = binding
+                with self.subTest(phase=phase, binding=binding), \
+                        patch.dict(self.p[phase], {"config": ""}), \
+                        patch.object(self.provider, "query", return_value=result), \
+                        self.assertRaisesRegex(c.Blocked, "provider-service-config-drift"):
+                    self.provider.preflight(phase)
 
 
 if __name__ == "__main__":
