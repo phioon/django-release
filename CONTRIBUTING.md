@@ -38,5 +38,5 @@ evidence are separate from these offline checks. Repository policy files describ
 the desired review/protection settings; their presence does not establish that
 GitHub has applied them.
 
-There is currently no license grant; the repository owner must select a license.
-Do not introduce one as an incidental implementation change.
+The code and associated documentation are licensed under the [MIT License](LICENSE).
+By submitting a contribution, you agree to license it under the same MIT License.

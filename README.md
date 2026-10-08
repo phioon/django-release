@@ -118,6 +118,4 @@ still requires your own serving-readiness check.
 - [Examples](docs/examples.md): two independent fictional consumers and receipts.
 - [Contributing](CONTRIBUTING.md) and [security reporting](SECURITY.md).
 
-There is currently no license file or license grant in this repository. Public
-visibility alone does not grant permission to reuse, modify, or redistribute its
-code. A license choice remains with the repository owner.
+The code and associated documentation are available under the [MIT License](LICENSE).
