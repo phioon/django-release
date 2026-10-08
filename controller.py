@@ -454,6 +454,7 @@ class Railway:
             healthcheckPath numReplicas restartPolicyType domains{serviceDomains{id} customDomains{id}}}
         }""", self.target(service["service_id"]))
         instance = result["serviceInstance"]
+        config_binding = instance["railwayConfigFile"]
         require(result["service"] == {"id": service["service_id"], "name": service["name"],
                                       "projectId": self.policy["project_id"]}
                 and instance["serviceId"] == service["service_id"]
@@ -462,7 +463,8 @@ class Railway:
         require(result["serviceInstanceAutoDeployStatus"]["enabled"] is False,
                 "native-autodeploy-must-be-disabled")
         require(instance["source"] == {"repo": self.policy["repository"], "image": None}
-                and instance["railwayConfigFile"] is None and service["config"] is None
+                and (config_binding is None or type(config_binding) is str and config_binding == "")
+                and service["config"] is None
                 and (instance["rootDirectory"] or "/") == service["root_directory"]
                 and not instance["preDeployCommand"] and instance["numReplicas"] == 1
                 and not result["tcpProxies"], "provider-service-config-drift")
