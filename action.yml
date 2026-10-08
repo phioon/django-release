@@ -1,8 +1,8 @@
 name: Django release
-description: Run exact-SHA Schema Maintenance and verify its receipt before deploying the serving application on Railway.
+description: Verify exact-SHA Schema Maintenance on Railway; policy v1 also deploys the application, while v2 is schema-only.
 inputs:
   policy:
-    description: Path to a version-1 JSON policy in the checked-out caller repository.
+    description: Path to a committed JSON policy (v1 schema and application, or explicit v2 schema-only).
     required: true
   github-token:
     description: Caller GITHUB_TOKEN with contents read, actions read, and deployments write.
@@ -13,7 +13,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Verify schema then release application
+    - name: Run the policy-selected schema-only or schema and application release
       shell: bash
       env:
         RELEASE_POLICY: ${{ inputs.policy }}

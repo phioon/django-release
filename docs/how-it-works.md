@@ -6,6 +6,14 @@ database, execute configurable shell hooks, or supply a reusable workflow.
 
 ## One commit, two phases
 
+This sequence is policy version 1 and remains unchanged. Explicit version-2
+`schema-only` mode performs steps 1–4, with step 3 checking only Schema Maintenance.
+It makes no application-provider calls and appends no application intent. Both
+GitHub history categories and their continuity checks remain active, including
+blocking on unresolved legacy application submissions. The historical application
+UUID in the policy binds those records without granting provider authority.
+Application deployment and startup readiness belong to the consumer in that mode.
+
 1. Scan the exact candidate commit for `railway.toml` and `railway.json` anywhere,
    rejecting either name before any provider request. Read the policy's exact
    committed blob, rejecting changed/staged files and all symlink components;
@@ -22,8 +30,9 @@ database, execute configurable shell hooks, or supply a reusable workflow.
 5. Check the branch and record ownership again. Create the application intent,
    submit that exact SHA, retain its returned ID, and observe its success.
 
-Each successful release submits the application once. A failed or unresolved
-release may submit it zero times. A rerun resumes observation of a durably recorded
+Each successful version-1 release submits the application once. A failed or
+unresolved version-1 release may submit it zero times. Version-2 schema-only
+execution never submits the application. A rerun resumes observation of a durably recorded
 ID or uses a verified terminal record; it does not repeat the submission. The
 action does not automatically retry HTTP requests.
 

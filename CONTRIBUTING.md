@@ -27,7 +27,7 @@ staged, modified and symlinked paths. They never change this repository's refs.
 
 Add meaningful regression cases for changed behavior, especially format upgrades,
 ordering, run/attempt binding, history continuity, uncertainty, and wrong-target
-responses. Keep the three schemas aligned with the controller's small supported
+responses. Keep the versioned schemas aligned with the controller's small supported
 JSON Schema subset. The schemas are strict owned payload contracts; normal
 third-party API envelope metadata is outside those contracts.
 

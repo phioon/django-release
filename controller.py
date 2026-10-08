@@ -92,8 +92,21 @@ def validate(value, schema):
 
 
 def contract(value, name):
-    validate(value, decode((ROOT / "schemas" / (name + "-v1.schema.json")).read_text()))
+    version = value.get("format_version") if type(value) is dict else None
+    require(type(version) is int and version in ((1, 2) if name == "policy" else (1,)),
+            "unsupported-format-or-result")
+    validate(value, decode((ROOT / "schemas" / f"{name}-v{version}.schema.json").read_text()))
     return value
+
+
+def release_phases(policy):
+    return ("schema",) if policy["format_version"] == 2 else PHASES
+
+
+def historical_service(policy, phase):
+    if phase == "application" and policy["format_version"] == 2:
+        return policy["historical_application_service_id"]
+    return policy[phase]["service_id"]
 
 
 def load_policy(path):
@@ -105,7 +118,7 @@ def load_policy(path):
 def policy_bytes(content):
     require(len(content) <= 16384, "policy-size-limit")
     policy = contract(decode(content), "policy")
-    require(policy["schema"]["service_id"] != policy["application"]["service_id"],
+    require(policy["schema"]["service_id"] != historical_service(policy, "application"),
             "schema-application-must-be-isolated")
     require(policy["schema"]["public_http"] is False
             and policy["schema"]["restart_policy"] == "NEVER"
@@ -297,7 +310,7 @@ class GitHub:
                 and item["environment"] == self.category(p["phase"]), "wrong-record-binding")
         for key in ("repository", "consumer", "workflow", "project_id", "environment_id"):
             require(p[key] == self.policy[key], "wrong-record-target")
-        require(p["service_id"] == self.policy[p["phase"]]["service_id"], "wrong-record-target")
+        require(p["service_id"] == historical_service(self.policy, p["phase"]), "wrong-record-target")
         require(all(v is None or v < item["id"] for v in p["previous_heads"].values()),
                 "broken-history-continuity")
         if p["phase"] == "application":
@@ -405,6 +418,7 @@ class GitHub:
             if state[0] not in ("verified", "failed", "stale"):
                 p = item["payload"]
                 self.validate_run(p["source_sha"], p["run_id"], p["run_attempt"])
+                require(p["phase"] in release_phases(self.policy), "prior-release-unresolved")
                 require(item["sha"] == sha, "prior-release-unresolved")
         return list(rows.values()), heads, cache
 
@@ -563,8 +577,8 @@ class Engine:
             require(state == "submitted", phase + "-submission-unattributed-no-resubmit")
         else:
             self.current()
-            self.railway.preflight("schema")
-            self.railway.preflight("application")
+            for target_phase in release_phases(self.policy):
+                self.railway.preflight(target_phase)
             before = self.bound_deployments(service)
             require(not any(r.get("meta", {}).get("commitHash") == self.sha for r in before),
                     "untracked-same-sha-deployment")
@@ -624,8 +638,8 @@ class Engine:
 
     def execute(self):
         self.github.validate_run(self.sha, self.run_id, self.run_attempt)
-        self.phase("schema")
-        self.phase("application")
+        for phase in release_phases(self.policy):
+            self.phase(phase)
 
 
 def context(policy, env):
@@ -664,7 +678,8 @@ def main():
         require(env.get("GITHUB_TOKEN") and env.get("RAILWAY_TOKEN"), "release-credentials-unconfigured")
         Engine(policy, GitHub(policy, env["GITHUB_TOKEN"]), Railway(policy, env["RAILWAY_TOKEN"]),
                env["GITHUB_SHA"], int(env["GITHUB_RUN_ID"]), int(env["GITHUB_RUN_ATTEMPT"])).execute()
-        print("django-release: schema and application records verified; check serving readiness separately")
+        phases = "schema" if policy["format_version"] == 2 else "schema and application"
+        print(f"django-release: {phases} records verified; check serving readiness separately")
         return 0
     except Blocked as error:
         print("django-release blocked: " + str(error)
