@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Django release failure v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format_version", "repository", "consumer", "source_sha", "project_id", "environment_id", "service_id", "deployment_id", "stage"],
+  "properties": {
+    "format_version": {"const": 1},
+    "repository": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
+    "consumer": {"type": "string", "minLength": 1, "maxLength": 40, "pattern": "^[a-z][a-z0-9-]{0,39}$"},
+    "source_sha": {"type": "string", "minLength": 1, "maxLength": 40, "pattern": "^[0-9a-f]{40}$"},
+    "project_id": {"type": "string", "minLength": 1, "maxLength": 36, "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "environment_id": {"type": "string", "minLength": 1, "maxLength": 36, "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "service_id": {"type": "string", "minLength": 1, "maxLength": 36, "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "deployment_id": {"type": "string", "minLength": 1, "maxLength": 36, "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "stage": {"enum": ["migration", "consumer-verification"]}
+  }
+}

@@ -120,6 +120,13 @@ Inspect the two GitHub deployment categories and follow the recovery guide; do
 not delete evidence to unlock a retry. A successful provider deployment status
 still requires your own serving-readiness check.
 
+Maintenance may emit a strict, identity-bound
+[failure result](docs/configuration.md#maintenance-failure-result) with only the
+stage `migration` or `consumer-verification`. Exact recorded failures remain
+attributable even when unrelated deployments interfere; success under interference
+still stops. A terminal failed SHA requires a new reviewed commit, while an
+unresolved rerun observes its already recorded deployment.
+
 ## Learn more
 
 - [How the action works](docs/how-it-works.md): ordering, records, reruns and limits.

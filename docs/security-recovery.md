@@ -74,6 +74,8 @@ tokens, connection strings, environment dumps or raw logs in an issue.
 | Schema migration/ACL failure | Version 1 has not submitted the application. Schema-only makes no application submission in any outcome; native applications may independently be queued or running, so inspect their state separately. Inspect the migration ledger and actual grants; correct forward. |
 | `submission-unattributed-no-resubmit`, intent without a returned ID | Stop. Preserve the intent. A lost response might still have started a deployment. This action cannot resolve or resubmit it. |
 | Recorded ID, observation timeout or missing receipt | Resume observation of that same ID after fixing read access or investigating the consumer result. Do not create another deployment. |
+| Exact recorded ID has `FAILED`, `CRASHED`, `SKIPPED`, or one valid bound `DJANGO_RELEASE_FAILURE` result | The controller records that ID failed even if unrelated deployments appeared. Inspect consumer state, correct forward and use a new reviewed SHA. Same-SHA reruns do not resubmit. |
+| Success with an unrelated post-baseline deployment | Remains unresolved and cannot authorize application submission. Investigate interference; never adopt the other deployment or delete evidence. |
 | Version-1 application failure after schema success, or independently observed native application failure | Schema remains changed. Keep/observe the previous serving version if available, resolve the failure, and ship a new reviewed commit. Schema-only does not observe or record native application outcomes. |
 | `prior-release-unresolved`, ambiguous/duplicate records or broken continuity | Reconcile the precise evidence through a reviewed recovery procedure. Never delete a record to make the history look empty. |
 | Stale branch | No new submission from that stale check. An already recorded ID can still be observed. Release the current reviewed commit after prior outcomes are resolved. |
@@ -89,7 +91,11 @@ procedure supported by independent provider evidence. It must not invent a succe
 status or loosen these rules.
 
 A successful migration followed by ACL failure may require the consumer's
-least-privileged reconciliation command. Partially applied non-atomic migrations
+least-privileged reconciliation command. A missing role may require separately
+authorized consumer bootstrap recovery; the controller never creates roles or
+supplies that authority. A bound `consumer-verification` failure may follow
+committed migrations, so do not infer rollback or readiness from the failure.
+Use a new reviewed SHA after a terminal failure. Partially applied non-atomic migrations
 need migration-specific recovery. Cancelling a job cannot undo database writes.
 There is no automatic schema rollback, image rollback, or native-autodeploy
 reenablement. If the previous app cannot serve against the new schema, contain
