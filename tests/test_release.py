@@ -130,7 +130,7 @@ class Provider:
         c.contract(expected, "receipt")
         if self.on_receipt:
             self.on_receipt()
-        return self.receipt_valid
+        return "verified" if self.receipt_valid else None
 
 
 class EngineTests(unittest.TestCase):

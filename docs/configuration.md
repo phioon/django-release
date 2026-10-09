@@ -152,6 +152,53 @@ Malformed, duplicate, contradictory, wrong-target, wrong-SHA, or missing receipt
 cannot authorize application submission. Logs and process exit alone cannot supply
 the meaning of these checks; your command and database tests must establish it.
 
+## Maintenance failure result
+
+A consumer may emit one single-line `DJANGO_RELEASE_FAILURE ` JSON object after
+its trusted source and provider identity checks succeed. The strict
+[failure-v1.schema.json](../schemas/failure-v1.schema.json) requires exactly
+`format_version: 1`, `repository`, `consumer`, `source_sha`, `project_id`,
+`environment_id`, `service_id`, `deployment_id`, and `stage`. The identity fields
+have the same meaning and binding as the success receipt. `stage` is exactly
+`migration` or `consumer-verification`; arbitrary messages, exception details,
+credentials, and additional fields are forbidden. The failure certifies no ACL
+policy or schema readiness. Setup/preflight failures before the consumer can
+establish trusted stage evidence must not fabricate this result.
+
+For example, using the fictional identities above:
+
+```json
+{
+  "format_version": 1,
+  "repository": "example-bookshop/bookshop",
+  "consumer": "bookshop",
+  "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "project_id": "11111111-1111-4111-8111-111111111111",
+  "environment_id": "12222222-2222-4222-8222-222222222222",
+  "service_id": "13333333-3333-4333-8333-333333333333",
+  "deployment_id": "55555555-5555-4555-8555-555555555555",
+  "stage": "consumer-verification"
+}
+```
+
+The controller reads only the durably submitted deployment's bounded log window.
+Exactly one valid, fully bound failure result records that deployment failed even
+if the provider reports `SUCCESS` or unrelated deployments appeared after the
+baseline. Duplicate success/failure lines, mixed success and failure, malformed
+JSON, unknown fields or stages, and wrong identity remain unresolved. A provider
+`FAILED`, `CRASHED` or `SKIPPED` state on the exact bound deployment independently
+establishes failure without requiring logs. Unrelated deployments are never adopted.
+After durably recording a provider failure, the controller attempts to read a valid
+failure marker for a fixed `schema-migration-failed-forward-recovery-required` or
+`schema-consumer-verification-failed-forward-recovery-required` diagnostic. Absent,
+unavailable or invalid logs retain the failed record and the generic
+`schema-forward-recovery-required` diagnostic. Record/status formats do not gain
+a stage field; a later same-SHA rerun uses that terminal record and generic reason.
+A known failure requires a new reviewed SHA; an unresolved rerun only observes
+its existing UUID. Action inputs, policy v1/v2, success receipts and record/status
+formats remain unchanged. Older action pins do not recognize failure results;
+upgrade the controller before relying on them.
+
 ## Release records
 
 [record-v1.schema.json](../schemas/record-v1.schema.json) defines the immutable

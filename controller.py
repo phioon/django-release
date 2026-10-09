@@ -17,6 +17,8 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 PHASES = ("schema", "application")
 RECEIPT_PREFIX = "DJANGO_RELEASE_RESULT "
+FAILURE_PREFIX = "DJANGO_RELEASE_FAILURE "
+FAILURE_STAGES = ("migration", "consumer-verification")
 BOT = "github-actions[bot]"
 UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 ROOT = Path(__file__).resolve().parent
@@ -522,6 +524,7 @@ class Railway:
         return deployment
 
     def receipt(self, deployment, expected):
+        """Return verified, an enumerated failure stage, or None from bound logs."""
         rows = self.query("""query($deploymentId:String!){
           deploymentLogs(deploymentId:$deploymentId,limit:500){message}}""",
                           {"deploymentId": deployment})["deploymentLogs"]
@@ -530,13 +533,21 @@ class Railway:
         for row in rows:
             message = row["message"]
             require(type(message) is str, "invalid-provider-log")
-            if message.startswith(RECEIPT_PREFIX):
-                require(len(message) <= 4096, "receipt-size-limit")
-                matches.append(contract(decode(message[len(RECEIPT_PREFIX):]), "receipt"))
+            for prefix, name in ((RECEIPT_PREFIX, "receipt"), (FAILURE_PREFIX, "failure")):
+                if message.startswith(prefix):
+                    require(len(message) <= 4096, "receipt-size-limit")
+                    matches.append((name, contract(decode(message[len(prefix):]), name)))
         require(len(matches) <= 1, "duplicate-maintenance-receipt")
         if matches:
-            require(matches[0] == expected, "wrong-maintenance-receipt")
-        return bool(matches)
+            name, result = matches[0]
+            if name == "failure":
+                identity = {k: v for k, v in expected.items()
+                            if k not in ("migrations_verified", "acl_verified", "acl_policy")}
+                require(result == {**identity, "stage": result["stage"]}, "wrong-maintenance-receipt")
+                return result["stage"]
+            require(result == expected, "wrong-maintenance-receipt")
+            return "verified"
+        return None
 
 
 class Engine:
@@ -611,26 +622,40 @@ class Engine:
             # intent unresolved. No discovery by timing, SHA or matching image.
             self.github.record(item, "submitted", submitted)
         before = set(item["payload"]["before"])
+        expected = {"format_version": 1, "repository": self.policy["repository"],
+                    "consumer": self.policy["consumer"], "source_sha": self.sha,
+                    "project_id": self.policy["project_id"],
+                    "environment_id": self.policy["environment_id"], "service_id": service,
+                    "deployment_id": submitted, "migrations_verified": True,
+                    "acl_verified": True, "acl_policy": self.policy["acl_policy"]}
         for _ in range(self.polls):
             candidates = [r for r in self.bound_deployments(service) if r["id"] not in before]
-            require(len(candidates) <= 1, "ambiguous-provider-submission")
-            if candidates:
-                row = candidates[0]
-                require(row["id"] == submitted and row.get("meta", {}).get("commitHash") == self.sha,
+            exact = [r for r in candidates if r["id"] == submitted]
+            if exact:
+                row = exact[0]
+                require(row.get("meta", {}).get("commitHash") == self.sha,
                         "provider-deployment-binding-mismatch")
                 if row["status"] in ("FAILED", "CRASHED", "SKIPPED"):
                     self.github.record(item, "failed", submitted)
+                    # Conclusive provider failure is durable before optional
+                    # stage diagnostics; missing/unreadable logs cannot undo it.
+                    if phase == "schema":
+                        try:
+                            result = self.railway.receipt(submitted, expected)
+                        except Exception:
+                            result = None
+                        if result in FAILURE_STAGES:
+                            raise Blocked("schema-" + result + "-failed-forward-recovery-required")
                     raise Blocked(phase + "-forward-recovery-required")
                 verified = row["status"] == "SUCCESS"
                 if phase == "schema":
-                    expected = {"format_version": 1, "repository": self.policy["repository"],
-                                "consumer": self.policy["consumer"], "source_sha": self.sha,
-                                "project_id": self.policy["project_id"],
-                                "environment_id": self.policy["environment_id"], "service_id": service,
-                                "deployment_id": submitted, "migrations_verified": True,
-                                "acl_verified": True, "acl_policy": self.policy["acl_policy"]}
-                    verified = row["status"] in ("SUCCESS", "REMOVED") and self.railway.receipt(submitted, expected)
+                    result = self.railway.receipt(submitted, expected)
+                    if result in FAILURE_STAGES:
+                        self.github.record(item, "failed", submitted)
+                        raise Blocked("schema-" + result + "-failed-forward-recovery-required")
+                    verified = row["status"] in ("SUCCESS", "REMOVED") and result == "verified"
                 if verified:
+                    require(len(candidates) == 1, "ambiguous-provider-submission")
                     self.github.record(item, "verified", submitted)
                     return
             self.sleep(5)

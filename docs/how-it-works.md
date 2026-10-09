@@ -85,12 +85,21 @@ remaining next page, repeated cursor, duplicate deployment, malformed response,
 or exhausted rate allowance stops the release. The controller does not prune
 history to bypass these limits.
 
-Receipt extraction requires fewer than 500 returned log lines, one receipt, and a
-receipt of at most 4 KiB. It rejects a full log window because completeness is
+Result extraction requires fewer than 500 returned log lines, at most one success
+or failure result in total, and a result of at most 4 KiB. It rejects a full log window because completeness is
 unknown. Keep maintenance output bounded and never print database credentials.
 There are at most 240 polls, five seconds apart, per phase; request duration adds
 to elapsed time. The caller's job timeout is the outer limit. Cancellation after
 an intent was written can leave an unresolved record.
+
+Observation selects the exact durably submitted UUID from those bounded listings.
+Its bound `FAILED`, `CRASHED` or `SKIPPED` status records failure even with unrelated
+post-baseline deployments. Schema Maintenance can also establish failure with one
+strict [bound failure result](configuration.md#maintenance-failure-result), including
+when provider status says `SUCCESS`. Success still requires no unrelated deployment
+after the baseline and the unchanged full success receipt. Missing or inconclusive
+exact evidence remains unresolved; another deployment cannot replace it. Reruns
+observe the same UUID, while a terminal failed SHA requires a new reviewed commit.
 
 ## What success establishes
 
