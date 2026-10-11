@@ -95,7 +95,8 @@ def validate(value, schema):
 
 def contract(value, name):
     version = value.get("format_version") if type(value) is dict else None
-    require(type(version) is int and version in ((1, 2) if name == "policy" else (1,)),
+    versions = {"policy": (1, 2, 3), "receipt": (1, 2)}.get(name, (1,))
+    require(type(version) is int and version in versions,
             "unsupported-format-or-result")
     validate(value, decode((ROOT / "schemas" / f"{name}-v{version}.schema.json").read_text()))
     return value
@@ -120,8 +121,9 @@ def load_policy(path):
 def policy_bytes(content):
     require(len(content) <= 16384, "policy-size-limit")
     policy = contract(decode(content), "policy")
-    require(policy["schema"]["service_id"] != historical_service(policy, "application"),
-            "schema-application-must-be-isolated")
+    if policy["format_version"] != 3:
+        require(policy["schema"]["service_id"] != historical_service(policy, "application"),
+                "schema-application-must-be-isolated")
     require(policy["schema"]["public_http"] is False
             and policy["schema"]["restart_policy"] == "NEVER"
             and policy["schema"]["healthcheck_path"] is None,
@@ -523,6 +525,48 @@ class Railway:
                 "provider-submission-unattributed")
         return deployment
 
+    def deployment(self, deployment):
+        """Observe only the ID returned by this invocation's submission."""
+        return self.query("""query($id:String!){
+          deployment(id:$id){id projectId environmentId serviceId status meta}}
+          """, {"id": deployment})["deployment"]
+
+    def active_deployment(self, service):
+        """Wait on transient deployments without scanning lifetime history.
+
+        Railway retains SUCCESS after a one-shot exits. It cannot be a permanent
+        retry lock, and passing this check does not prove every process exited.
+        """
+        result = self.query("""query($input:DeploymentListInput!){
+          deployments(input:$input,first:1){pageInfo{hasNextPage}
+            edges{node{id projectId environmentId serviceId status}}}}
+          """, {"input": {**self.target(service), "status": {
+              "notIn": ["SUCCESS", "FAILED", "CRASHED", "REMOVED", "SKIPPED"]}}})["deployments"]
+        edges, more = result["edges"], result["pageInfo"]["hasNextPage"]
+        require(type(edges) is list and len(edges) <= 1 and type(more) is bool
+                and (edges or not more), "invalid-provider-page")
+        return edges[0]["node"] if edges else None
+
+    def migration_receipt(self, deployment, expected):
+        """The v3 result proves migrations only; legacy ACL receipts stay strict."""
+        rows = self.query("""query($deploymentId:String!){
+          deploymentLogs(deploymentId:$deploymentId,limit:500){message}}""",
+                          {"deploymentId": deployment})["deploymentLogs"]
+        require(type(rows) is list and len(rows) < 500, "receipt-log-window-incomplete")
+        matches = []
+        for row in rows:
+            message = row["message"]
+            require(type(message) is str, "invalid-provider-log")
+            require(not message.startswith(FAILURE_PREFIX), "maintenance-reported-failure")
+            if message.startswith(RECEIPT_PREFIX):
+                require(len(message) <= 4096, "receipt-size-limit")
+                matches.append(contract(decode(message[len(RECEIPT_PREFIX):]), "receipt"))
+        require(len(matches) <= 1, "duplicate-maintenance-receipt")
+        if matches:
+            require(matches[0] == expected, "wrong-maintenance-receipt")
+            return True
+        return False
+
     def receipt(self, deployment, expected):
         """Return verified, an enumerated failure stage, or None from bound logs."""
         rows = self.query("""query($deploymentId:String!){
@@ -662,9 +706,68 @@ class Engine:
         raise Blocked(phase + "-observation-unresolved-no-resubmit")
 
     def execute(self):
+        require(self.policy["format_version"] in (1, 2), "legacy-policy-required")
         self.github.validate_run(self.sha, self.run_id, self.run_attempt)
         for phase in release_phases(self.policy):
             self.phase(phase)
+
+
+class MigrationsEngine:
+    """One fresh attempt per invocation; no GitHub client or release ledger."""
+    ACTIVE = ("INITIALIZING", "BUILDING", "DEPLOYING", "SUCCESS", "SLEEPING",
+              "WAITING", "QUEUED", "NEEDS_APPROVAL", "REMOVING")
+    FAILED = ("FAILED", "CRASHED", "SKIPPED")
+
+    def __init__(self, policy, railway, sha, *, sleep=time.sleep, polls=240):
+        self.policy, self.railway, self.sha = policy, railway, sha
+        self.sleep, self.polls = sleep, polls
+
+    def bound(self, row):
+        require(type(row) is dict and type(row.get("id")) is str
+                and re.fullmatch(UUID, row["id"]), "invalid-deployment-id")
+        require(all(row.get(key) == value for key, value in
+                    self.railway.target(self.policy["schema"]["service_id"]).items()),
+                "wrong-deployment-target")
+
+    def wait_for_idle(self, service):
+        for _ in range(self.polls):
+            row = self.railway.active_deployment(service)
+            if row is None:
+                return
+            self.bound(row)
+            require(row.get("status") in self.ACTIVE and row["status"] != "SUCCESS",
+                    "unknown-active-deployment-state")
+            self.sleep(5)
+        raise Blocked("maintenance-still-active")
+
+    def execute(self):
+        require(self.policy["format_version"] == 3, "migrations-only-policy-required")
+        service = self.policy["schema"]["service_id"]
+        self.railway.preflight("schema")
+        self.wait_for_idle(service)
+        # No internal retry: an uncertain mutation fails this invocation. A new
+        # workflow invocation submits fresh work after the bounded idle check.
+        submitted = self.railway.submit(service, self.sha)
+        require(type(submitted) is str and re.fullmatch(UUID, submitted),
+                "provider-submission-unattributed")
+        expected = {"format_version": 2, "repository": self.policy["repository"],
+                    "consumer": self.policy["consumer"], "source_sha": self.sha,
+                    "project_id": self.policy["project_id"],
+                    "environment_id": self.policy["environment_id"], "service_id": service,
+                    "deployment_id": submitted, "migrations_verified": True}
+        for _ in range(self.polls):
+            row = self.railway.deployment(submitted)
+            self.bound(row)
+            require(row["id"] == submitted and type(row.get("meta")) is dict
+                    and row["meta"].get("commitHash") == self.sha,
+                    "provider-deployment-binding-mismatch")
+            status = row.get("status")
+            require(status not in self.FAILED, "migration-deployment-failed")
+            require(status in (*self.ACTIVE, "REMOVED"), "unknown-deployment-state")
+            if status in ("SUCCESS", "REMOVED") and self.railway.migration_receipt(submitted, expected):
+                return
+            self.sleep(5)
+        raise Blocked("migration-observation-timeout")
 
 
 def context(policy, env):
@@ -690,6 +793,7 @@ def context(policy, env):
 
 
 def main():
+    migrations_only = False
     try:
         parser = argparse.ArgumentParser(description=__doc__)
         parser.add_argument("--policy", required=True)
@@ -699,20 +803,29 @@ def main():
         workspace = Path(env["GITHUB_WORKSPACE"])
         verify_dashboard_only_tree(workspace, env.get("GITHUB_SHA", ""))
         policy = committed_policy(workspace, args.policy, env.get("GITHUB_SHA", ""))
+        migrations_only = policy["format_version"] == 3
         context(policy, env)
-        require(env.get("GITHUB_TOKEN") and env.get("RAILWAY_TOKEN"), "release-credentials-unconfigured")
-        Engine(policy, GitHub(policy, env["GITHUB_TOKEN"]), Railway(policy, env["RAILWAY_TOKEN"]),
-               env["GITHUB_SHA"], int(env["GITHUB_RUN_ID"]), int(env["GITHUB_RUN_ATTEMPT"])).execute()
-        phases = "schema" if policy["format_version"] == 2 else "schema and application"
-        print(f"django-release: {phases} records verified; check serving readiness separately")
+        require(env.get("RAILWAY_TOKEN") and (migrations_only or env.get("GITHUB_TOKEN")),
+                "release-credentials-unconfigured")
+        railway = Railway(policy, env["RAILWAY_TOKEN"])
+        if migrations_only:
+            MigrationsEngine(policy, railway, env["GITHUB_SHA"]).execute()
+            print("django-release: current migration attempt verified; check serving readiness separately")
+        else:
+            Engine(policy, GitHub(policy, env["GITHUB_TOKEN"]), railway,
+                   env["GITHUB_SHA"], int(env["GITHUB_RUN_ID"]), int(env["GITHUB_RUN_ATTEMPT"])).execute()
+            phases = "schema" if policy["format_version"] == 2 else "schema and application"
+            print(f"django-release: {phases} records verified; check serving readiness separately")
         return 0
     except Blocked as error:
-        print("django-release blocked: " + str(error)
-              + ". Preserve release records; see docs/security-recovery.md before retrying.")
+        guidance = ("This invocation failed; a retry starts a fresh migration attempt."
+                    if migrations_only else "Preserve release records; see docs/security-recovery.md before retrying.")
+        print("django-release blocked: " + str(error) + ". " + guidance)
         return 1
     except Exception:
-        print("django-release blocked: invalid-or-unavailable-response. Details suppressed; "
-              "preserve records and inspect access/configuration privately.")
+        guidance = ("this invocation failed; inspect access/configuration privately before a fresh attempt."
+                    if migrations_only else "preserve records and inspect access/configuration privately.")
+        print("django-release blocked: invalid-or-unavailable-response. Details suppressed; " + guidance)
         return 1
 
 

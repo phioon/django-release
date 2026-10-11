@@ -1,6 +1,116 @@
 # Security, recovery and upgrades
 
-## Establish the boundary before activation
+## V3 security boundary
+
+Use policy v3 `migrations-only` for the primary migration gate. It validates the
+trusted push/workflow/checkout and committed policy locally, then addresses only
+the configured Railway Schema Maintenance service. It makes no GitHub API call
+and needs no GitHub run-read or deployment-write permission. The checkout still
+needs contents read. A Railway project token remains environment-scoped and can
+reach other services; the controller's target restriction is not provider-enforced
+service isolation. Keep that token out of service variables.
+
+Use a private one-shot Maintenance service with disabled native autodeploy and
+Wait for CI, reviewed dashboard process settings, no config-file override, one
+replica and restart policy `NEVER`. The exact commit cannot contain `railway.toml`
+or `railway.json` anywhere. Protect workflow, policy, migrations, command and action
+pin through review. Use separate migration and runtime credentials. Consumers own
+least-privilege database grants, ownership, provisioning, TLS and database tests;
+v3 neither implements those policies nor claims to verify them in its receipt.
+
+The consumer command must hold an appropriate database lock through migration
+work, apply and verify the complete expected migration graph, and emit one fully
+bound receipt after all its required work passes. If its own permissions checks
+are required, they must also pass before success. Ordinary app startup must use
+its limited role and must not migrate or repair the database.
+
+Configure other native services with Wait for CI. The migration workflow must run
+on every trusted push, with no path skips, conditional skips, `continue-on-error`
+or concurrency cancellation of queued runs. Railway's
+[Wait for CI rules](https://docs.railway.com/deployments/github-autodeploys#wait-for-ci)
+allow skipped/neutral runs and can ignore a cancelled workflow when another one
+passed. Qualify those settings and use a consumer-owned read-only startup schema
+gate to contain missing migrations. The action does not supply that gate, verify
+native service settings or establish serving health.
+
+Before production, qualify exact-SHA submissions, direct deployment-ID reads,
+the bounded transient-state filter, receipt retention, consumer locks, command
+semantics and native Wait for CI behavior on disposable infrastructure. Official
+[Railway API guidance](https://docs.railway.com/integrations/api/manage-deployments)
+and [CLI schema](https://github.com/railwayapp/cli/blob/master/src/gql/schema.json)
+support the query shapes; offline fixtures cannot prove hosted permissions,
+provider stability or database correctness.
+
+## Consumer database roles
+
+A common consumer pattern uses `db_migrator_user` to create and change schema,
+and `db_runtime_user` for the application's defined table access. Configure their
+credentials in the appropriate Railway services; do not pass them to this action.
+Choose the runtime privileges from the application's actual requirements.
+
+For a uniform access policy, consumer provisioning can configure PostgreSQL
+default privileges for objects subsequently created by the migrator role. The
+defaults belong to the role actually creating the objects, are not inherited
+from its memberships, and do not update existing objects. Existing-table grants,
+schema access and sequence privileges need their own reviewed scopes. See
+[PostgreSQL default privileges](https://www.postgresql.org/docs/current/sql-alterdefaultprivileges.html).
+Applications with more restricted roles or per-table access need a corresponding
+consumer policy instead of a universal `GRANT ALL` rule. This product supplies
+no grant executor or role-provisioning helper.
+
+## V3 failure and retry
+
+Any failed, unknown or timed-out attempt fails CI. Workflow cancellation does not
+verify migration success or undo database changes. A retry is a **new invocation**
+that submits a new exact-SHA Maintenance deployment; no earlier receipt, failure
+record or release status decides its success. The controller never repeats an
+uncertain submission within the same invocation and never discovers/adopts an
+ID by time, SHA, image or listing.
+
+| Situation | Response |
+| --- | --- |
+| Event, workflow, checkout, committed policy or target mismatch | Fix the binding or reviewed configuration. Invalid preflight cannot mutate Railway. |
+| Transient Maintenance deployment remains active | The bounded wait fails before submission. Investigate the existing process, then invoke the workflow again. |
+| Submission response is lost, malformed or unavailable | This invocation fails. An earlier process may exist; a subsequent invocation performs the bounded activity check and submits fresh work. |
+| Exact deployment has `FAILED`, `CRASHED`, `SKIPPED` or an unknown/cancelled state | Fail even if a success-looking receipt exists. Investigate consumer work before another invocation. |
+| Missing receipt or current-attempt observation timeout | Fail CI. Restore read access or fix the consumer command; the next invocation executes again. |
+| Malformed, duplicate, contradictory or wrong-target/SHA/ID receipt | Fail CI. Correct the command or binding, never accept an older receipt. |
+| Migration or consumer permission check fails | Inspect the database and correct the consumer problem. A same-SHA retry is permitted when appropriate and executes the command again. Code changes require a new reviewed SHA. |
+
+The activity check excludes retained `SUCCESS` because one-shots can keep that
+status after exit. This is not process-exit proof. A new deployment may stop or
+replace an older process, including after a lost response. The database lock
+serializes work but cannot prevent provider interruption, make non-atomic
+migrations atomic, or repair partially applied changes. Developers own those
+repairs outside the workflow. There is no automatic migration-history editing,
+schema rollback, role creation, app deployment, or recovery loop.
+
+Inspect provider logs and database state privately. The controller prints fixed
+reason codes and suppresses raw remote diagnostics. Never publish tokens,
+connection strings, environment dumps or raw logs in an issue.
+
+## Adopting v3 from a legacy policy
+
+Adoption is an explicit reviewed change to policy v3, receipt v2, the action pin
+and the caller workflow. Remove legacy application/history/ACL fields from the
+policy and remove unused GitHub token input and run/deployment permissions.
+Review native service settings, Maintenance independence, the consumer lock and
+startup containment before activation. Finish or contain outstanding old work
+operationally; v3 does not resume it or reconcile predecessor records. Preserve
+old records as evidence: v3 leaves them untouched and does not read them. A v3
+success certifies only the newly submitted attempt, not historical resolution.
+
+Do not downgrade to an older pin expecting it to understand v3. Review consumer
+fixtures and database behavior for every upgrade. Non-atomic repairs and
+permissions/provisioning remain consumer decisions outside the action.
+
+## Legacy v1/v2 boundary and recovery
+
+The remaining operational rules apply **only to legacy policies v1/v2**. Their
+GitHub ledger, ACL receipt, history admission and no-resubmission semantics remain
+unchanged. They are not the v3 failure/retry contract.
+
+### Establish the legacy boundary before activation
 
 Keep the serving application's database role limited to its required queries.
 Schema Maintenance gets the separate migrator role needed to change schema and
@@ -24,8 +134,8 @@ no config-file override on both targets for version 1, or on Schema Maintenance
 for schema-only mode. Schema-only preflight never inspects application settings.
 Remove committed `railway.toml` and `railway.json` files from all
 locations, including nested service roots; Railway's automatic discovery can
-override dashboard settings even when the explicit binding is null. Both modes
-scans the exact candidate tree and refuses these names anywhere before any provider
+override dashboard settings even when the explicit binding is null. Both legacy modes
+scan the exact candidate tree and refuses these names anywhere before any provider
 request. A bounded or unavailable scan also stops the release. The policy itself
 must be committed at the event SHA, without
 staged or working changes or symlink components; the action parses only those
@@ -58,7 +168,7 @@ permissions, retention, or hosted semantics. Preflight checks selected settings,
 not all effective container/environment behavior. No deployment activation is
 implied by merging this repository.
 
-## When a release stops
+### When a legacy release stops
 
 The controller prints a fixed reason code and suppresses raw provider diagnostics.
 Inspect GitHub deployment records and provider state privately. Never publish
@@ -101,7 +211,7 @@ There is no automatic schema rollback, image rollback, or native-autodeploy
 reenablement. If the previous app cannot serve against the new schema, contain
 access and recover forward; provider retention alone does not prove availability.
 
-## Upgrading and vulnerability response
+### Legacy upgrades and vulnerability response
 
 For a version-1 to schema-only cutover, retain the workflow and concurrency
 identity, consumer prefix, both deployment categories, and exact historical

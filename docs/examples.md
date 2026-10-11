@@ -1,6 +1,34 @@
 # Fictional consumers
 
-The offline suite uses two independent applications:
+## Migrations-only consumers (v3)
+
+[Bookshop](../tests/fixtures/bookshop-migrations.json) and
+[Observatory](../tests/fixtures/observatory-migrations.json) are independent,
+fictional v3 consumers with separate repositories and Railway targets. Their
+policies have only a Maintenance target and migration receipt identity, with no
+application or ACL policy fields. The example command `python manage.py
+migrate_release` is consumer-implemented; this action supplies no Django command.
+
+Each command acquires its database lock, applies and verifies the reviewed
+migration graph, and prints the strict [receipt v2](configuration.md#migration-receipt-v2)
+only after its work completes. Consumers can implement their own provisioning
+and permission checks, but those policies are not part of the generic receipt.
+Use the [v3 push workflow](../README.md#quickstart) without cancellation or skips;
+the database lock provides migration serialization.
+
+For example, after Maintenance succeeds, rerunning the same push workflow submits
+another deployment at the same SHA and requires that new ID's receipt. After a
+lost submission response, the current invocation fails without an internal
+resubmit; a new invocation checks transient activity and submits fresh work.
+A receipt from the earlier UUID cannot pass the new check, even for the same SHA.
+Partial non-atomic migration repairs remain developer-owned outside this workflow.
+
+## Legacy consumers (v1/v2)
+
+The following record categories, ACL identifiers and rerun examples belong only
+to the legacy modes. They remain compatible and are not required by v3.
+
+The legacy offline suite uses two independent applications:
 
 | Consumer | Repository | Record categories | ACL identifier |
 | --- | --- | --- | --- |
@@ -21,7 +49,7 @@ verify its entire migration graph and ACL policy before emitting its receipt.
 The fixture command `python manage.py release_schema` is illustrative; no such
 management command is supplied here.
 
-## Emitting the result
+## Emitting the result (all modes)
 
 After all checks have succeeded, your own Python maintenance command can serialize
 its verified result in this form:
@@ -33,12 +61,13 @@ print("DJANGO_RELEASE_RESULT " + json.dumps(verified_result, separators=(",", ":
 ```
 
 Emit exactly one line. Do not print success in an exception handler or before the
-transaction/checks complete. Do not rely on the log line to prove the command's
+transaction/checks complete. Use receipt v2 for policy v3 and the unchanged
+full ACL receipt v1 for legacy policies v1/v2. Do not rely on the log line to prove the command's
 correctness: test your database behavior separately. If schema changes have been
 committed but permission checks fail, exit nonzero without a success receipt and
 use the recovery procedure.
 
-## Rerun examples
+## Legacy rerun examples
 
 If Schema Maintenance succeeded and the job stopped after storing the application's
 returned deployment ID, a rerun observes that ID. It does not submit the app again.

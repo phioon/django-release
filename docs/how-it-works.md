@@ -1,10 +1,70 @@
 # How it works
 
 The action runs inside your GitHub Actions job. Its fixed Python controller talks
-only to GitHub and Railway. It does not start a controller service, store its own
+to Railway, and only in legacy modes to GitHub. It does not start a controller service, store its own
 database, execute configurable shell hooks, or supply a reusable workflow.
 
-## One commit, two phases
+## V3: one fresh migration attempt
+
+Policy v3 `migrations-only` is the primary mode:
+
+1. Scan the exact candidate Git tree for unsupported Railway config files. Verify
+   the committed policy, index/worktree identity, trusted push event, workflow and
+   exact checkout SHA before any provider request.
+2. Preflight only Schema Maintenance against the policy's source, target and process
+   expectations. Wait within a fixed bound while a transient deployment exists.
+3. Submit a fresh Maintenance deployment with `commitSha` equal to the push SHA.
+   Keep the returned UUID for this invocation. An uncertain mutation ends the
+   invocation; no internal second submission occurs.
+4. Query that exact UUID and validate project, environment, service and source SHA.
+   On `SUCCESS` or `REMOVED`, require the strict current
+   [migration receipt v2](configuration.md#migration-receipt-v2). Provider failures,
+   malformed responses, conflicting results and timeouts fail the CI job.
+5. Railway's other native services can proceed through their independently
+   configured Wait for CI. The action makes no application calls.
+
+Every subsequent invocation repeats this sequence, including after prior success,
+failure, missing receipt, lost response or cancellation at the same SHA. Earlier
+records and receipts never authorize current success. There is no GitHub client,
+run/history lookup, deployment record write, predecessor reconciliation or cached
+success in this path. Source SHA preflight does not reject a retry or demand that
+the event SHA still be the branch head.
+
+The transient activity query is a bounded existence check (`first: 1`) for the
+Maintenance target, excluding known terminal statuses and retained `SUCCESS`.
+No lifetime deployment history is paginated. The exact-attempt observer uses
+[Railway's direct deployment query](https://docs.railway.com/integrations/api/manage-deployments#get-a-single-deployment).
+Both the active wait and the current attempt have at most 240 polls, five seconds
+apart; request time adds to the total. HTTP requests have 30-second timeouts and
+are not automatically repeated. The workflow's timeout is the outer bound.
+
+The log read is scoped to the returned ID and limited to fewer than 500 lines;
+a full window cannot establish completeness. Results are limited to 4 KiB and
+must have exactly the versioned fields. Logs are read only for `SUCCESS` or
+`REMOVED`, never during the build/queue wait. A missing receipt keeps polling;
+malformed, duplicate, contradictory or mismatched results fail immediately.
+
+Railway [retains Success after a zero-exit process](https://docs.railway.com/deployments/deployment-actions).
+That status cannot permanently lock retries, but it also does not prove a process
+has exited. Activity checks and submission are not atomic. A fresh submission
+may replace or interrupt an older Maintenance process; they are not a distributed
+lock. The consumer must serialize migration work in its database, keep migrations
+compatible with serving code and handle partial non-atomic failures outside the
+action. The startup schema gate is also consumer-owned containment, not proof of
+successful orchestration or a generic implementation supplied here.
+
+Protect the required `push` workflow against path skips, conditional success and
+cancellation. The [README](../README.md#quickstart) explains the Wait for CI
+conclusion rules and keeps Maintenance independent of the native-service wait.
+The fixed receipt verifies migrations only. Database permissions, provisioning
+and actual serving readiness require separate consumer evidence.
+
+## Legacy modes
+
+The remaining sections describe **unchanged policies v1/v2 only**. Their ledger,
+ACL receipts and resume-without-resubmission rules do not apply to v3.
+
+## One commit, two phases (legacy)
 
 This sequence is policy version 1 and remains unchanged. Explicit version-2
 `schema-only` mode performs steps 1–4, with step 3 checking only Schema Maintenance.
@@ -42,7 +102,7 @@ absence of other deployment writers are prerequisites, not guarantees supplied b
 these API checks. A branch may advance immediately after the last check; migrations
 must remain compatible with the version still serving.
 
-## GitHub records
+## GitHub records (legacy)
 
 The only categories are `<consumer>-release-schema` and
 `<consumer>-release-application`. They are labels on GitHub Deployments, not extra
@@ -68,7 +128,7 @@ the caller's deployment permission can tamper with them. Restrict that permissio
 and preserve the record history. Do not import unrelated records into these
 categories, change identities in place, or invent success statuses manually.
 
-## Bounded observation
+## Bounded observation (legacy)
 
 The candidate-tree scan streams NUL-delimited paths with Git replacement objects
 disabled. It checks directory entries too, and stops at 50,000 paths, 4,000,000
@@ -101,7 +161,7 @@ after the baseline and the unchanged full success receipt. Missing or inconclusi
 exact evidence remains unresolved; another deployment cannot replace it. Reruns
 observe the same UUID, while a terminal failed SHA requires a new reviewed commit.
 
-## What success establishes
+## Qualification in every mode
 
 Source and offline tests establish the implemented checks and simulated recovery
 behavior. A real release additionally needs qualified GitHub/Railway permissions,
