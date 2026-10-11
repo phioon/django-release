@@ -1,0 +1,20 @@
+{
+  "format_version": 3,
+  "repository": "example-bookshop/bookshop",
+  "branch": "main",
+  "workflow": ".github/workflows/release.yml",
+  "consumer": "bookshop",
+  "project_id": "11111111-1111-4111-8111-111111111111",
+  "environment_id": "12222222-2222-4222-8222-222222222222",
+  "schema": {
+    "service_id": "13333333-3333-4333-8333-333333333333",
+    "name": "bookshop schema",
+    "config": null,
+    "root_directory": "/",
+    "start_command": "python manage.py migrate_release",
+    "healthcheck_path": null,
+    "restart_policy": "NEVER",
+    "public_http": false
+  },
+  "mode": "migrations-only"
+}

@@ -1,91 +1,72 @@
 # Django release
 
-A small GitHub composite action that runs your Django schema preparation on
-Railway and verifies its exact-commit result. Policy version 1 then submits your
-serving application at that commit. Explicit version-2 `schema-only` mode leaves
-application deployment to your platform. Your workflow controls when it runs and
-which credentials it receives.
+A small GitHub composite action that runs Django migrations on Railway and
+verifies the result for the exact push commit. The primary contract is policy
+version 3, `mode: "migrations-only"`: every invocation starts a fresh **Schema
+Maintenance** deployment, including a retry of the same SHA. It succeeds only
+when that attempt produces a matching migration receipt.
 
-Django migrations describe changes to your database. Deploying code that needs a
-new table before creating that table can break startup. This action separates the
-work: a private, short-lived **Schema Maintenance** service applies reviewed
-migrations and checks database permissions; the normal application deploys only
-after that service produces a verified success receipt in version 1. In schema-only
-mode, your independently deployed application needs its own read-only startup
-compatibility gate; this action neither implements that gate nor checks serving health.
+Your push workflow runs Maintenance independently of Railway's Wait for CI.
+After the workflow passes, Railway can deploy your other native services with
+Wait for CI enabled. This action has no application deployment calls in v3, no
+GitHub deployment ledger, and no historical-success shortcut. Policy versions
+1 and 2 retain their [legacy behavior](docs/configuration.md#policy-format-1).
 
-The application uses a limited database role for its everyday queries. Maintenance
-uses a more privileged role because changing tables and granting permissions need
-extra authority. Keep those credentials separate. The action itself receives no
-database password and does not generate migrations or implement your permissions.
+The consumer supplies the maintenance command: acquire a database lock, apply the
+reviewed migration graph, verify it, and emit the receipt after the command's work
+completes. Database roles, least-privilege grants and provisioning remain consumer
+responsibilities. The generic receipt verifies migrations; it does not certify
+permissions or serving health. No database credentials enter the action.
+See the [consumer database role pattern](docs/security-recovery.md#consumer-database-roles)
+for migrator/runtime separation and future-object default privileges.
 
 ## Before you start
 
-The quickstart below describes the unchanged version-1 two-service mode. For
-native application deployments, use the [version-2 schema-only contract](docs/configuration.md#policy-format-2-schema-only)
-and its upgrade/recovery requirements. Only Schema Maintenance is a provider
-target in that mode; disable native autodeploy on that service. Preserve the
-consumer, workflow, concurrency group and both historical deployment categories.
-
-This first delivery supplies source and offline tests. It is not evidence of a
-working deployment in your account. Qualify the Railway API operations, service
-settings, receipt logs, database permissions, and actual serving health in a
-disposable environment before enabling the workflow for production.
-
 You need:
 
-- A Django application whose reviewed migrations and permission changes remain
-  compatible with the currently serving version.
-- Two separate Railway services in one project/environment: private, one-shot
-  Schema Maintenance and the serving application. Disable native autodeploy on
-  both. Configure their process settings in Railway's dashboard, with no config-file
-  override (`config: null`). The candidate commit must have no `railway.toml` or
-  `railway.json` anywhere, including nested service roots: Railway can discover
-  these files automatically even without an explicit binding. Use one replica
-  each, no pre-deploy commands and no TCP proxies.
-- Your own tested maintenance command that serializes database work, migrates the
-  complete migration graph, reconciles and verifies the full ACL policy, and emits
-  the [versioned receipt](docs/configuration.md#maintenance-receipt). ACL means the
-  database's access-control permissions. A zero exit code alone is insufficient.
-- A Railway project token for that environment, stored as a GitHub Actions secret.
-  It can cover multiple services; it is not a service-scoped token. Do not put it
-  in either service's variables.
+- A reviewed migration command safe to run again, with database serialization and
+  changes compatible with the currently serving code. The action does not create
+  migrations, install a Django command, repair migration history, or grant permissions.
+- A private, one-shot Railway Schema Maintenance service in the intended project
+  and environment. Disable its native autodeploy and Wait for CI so it can run
+  while the workflow is in progress. Use one replica, restart policy `NEVER`, no
+  healthcheck, no pre-deploy command, and no HTTP domains or TCP proxies.
+- Reviewed Maintenance dashboard configuration with `config: null`. The candidate
+  repository must contain no `railway.toml` or `railway.json` anywhere: Railway
+  can discover these files even without an explicit config-file binding.
+- A Railway project token scoped to the environment, stored as a GitHub Actions
+  secret. It can reach multiple services; it is not a service-scoped credential.
+  Never put it in service variables.
 - A trusted push workflow, Python 3.11, and a reviewed full commit SHA of this
-  action. Protect workflow, policy, maintenance code, and migration changes through
+  action. Protect the workflow, policy, maintenance command and migrations with
   your repository's review rules.
+
+Qualify the API, exact-SHA build behavior, service isolation, migration command,
+locking and receipt logs on disposable infrastructure before production. Offline
+source tests do not establish deployed behavior.
 
 ## Quickstart
 
-1. Copy [the fictional bookshop policy](tests/fixtures/bookshop.json) to
-   `.github/django-release.json` in your application repository. Replace every
-   identity and process expectation with your reviewed dashboard settings. Keep
-   `config: null` for both services; this version does not support Railway config
-   files anywhere in the candidate repository. Remove legacy default config files
-   after moving their reviewed settings to the dashboard. Commit the policy with
-   the application changes. The action rejects
-   untracked, changed, staged, or symlinked policy files. The reference
-   command `release_schema` is a command **you must implement**; this action does
-   not install it. See [configuration](docs/configuration.md).
-2. Implement and test maintenance and its receipt on a disposable database. Check
-   the service isolation and recovery checklist in [security and recovery](docs/security-recovery.md).
-3. Add the workflow below after those prerequisites are verified. Replace
-   `REVIEWED_ACTION_COMMIT_SHA` with a real reviewed 40-character commit. The
-   placeholder deliberately does not select an unreviewed release.
+1. Copy [the fictional migrations-only policy](tests/fixtures/bookshop-migrations.json)
+   to `.github/django-release.json`. Replace the identities and process expectations
+   with your reviewed settings. The example `migrate_release` command is one **you
+   must implement**. Commit the policy; modified, staged, untracked and symlinked
+   policies are rejected. See the [configuration contract](docs/configuration.md#policy-format-3-migrations-only).
+2. Implement and test the [migration receipt](docs/configuration.md#migration-receipt-v2),
+   including identity checks and database locking. Resolve permissions and
+   provisioning through your consumer's own reviewed process.
+3. Save this workflow at the exact policy `workflow` path. Replace
+   `REVIEWED_ACTION_COMMIT_SHA` with a reviewed 40-character commit.
 
 ```yaml
-name: Release
+name: Migrations
 on:
   push:
     branches: [main]
 permissions:
   contents: read
-  actions: read
-  deployments: write
-concurrency:
-  group: bookshop-production-release
-  cancel-in-progress: false
 jobs:
-  release:
+  migrations:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     environment: production
@@ -100,39 +81,50 @@ jobs:
       - uses: phioon/django-release@REVIEWED_ACTION_COMMIT_SHA
         with:
           policy: .github/django-release.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           railway-token: ${{ secrets.RAILWAY_PROJECT_TOKEN }}
 ```
 
-The caller's GitHub environment, timeout, concurrency, token scope, and review
-requirements remain visible here. `actions: read` lets the action validate the
-repository, workflow, branch, SHA, run, and attempt behind a release record. Each
-consumer needs its own concurrency group, policy, provider token and records.
+Run this required workflow on every `main` push. Do not add path filters,
+conditional skips, `continue-on-error`, or a concurrency group that cancels queued
+runs. Database locking belongs in Maintenance. Enable native deployment and
+**Wait for CI on the other services**, keeping Maintenance independent of that
+wait to avoid a circular dependency.
 
-This action repository is public. If you host a private copy, first follow the
-[private-action access and download check](docs/examples.md#private-action-download-check)
-before adding provider secrets. GitHub manages the action-download credential;
-you do not need a personal access token.
+Railway evaluates workflow conclusions: skipped or neutral runs do not block,
+and a cancelled run can be ignored when another workflow on the commit passes.
+See [Railway's Wait for CI rules](https://docs.railway.com/deployments/github-autodeploys#wait-for-ci).
+Qualify this behavior and keep the migration workflow required and non-cancelling.
+A consumer-owned, read-only startup schema gate provides containment when native
+deployment proceeds without the required migrations. This action does not implement
+that gate or verify application health.
 
-After setup, a reviewed push to `main` is the routine release trigger. A failed or
-uncertain release stops. Rerunning never repeats an unattributed submission.
-Inspect the two GitHub deployment categories and follow the recovery guide; do
-not delete evidence to unlock a retry. A successful provider deployment status
-still requires your own serving-readiness check.
+## Failure and retry
 
-Maintenance may emit a strict, identity-bound
-[failure result](docs/configuration.md#maintenance-failure-result) with only the
-stage `migration` or `consumer-verification`. Exact recorded failures remain
-attributable even when unrelated deployments interfere; success under interference
-still stops. A terminal failed SHA requires a new reviewed commit, while an
-unresolved rerun observes its already recorded deployment.
+A failed, unknown, cancelled or timed-out invocation does not pass the migration
+check. A new workflow invocation submits another exact-SHA Maintenance deployment;
+it never reuses an earlier receipt. The controller does not repeat a mutation
+within an invocation when its response is uncertain.
 
-## Learn more
+Before submission it waits for transient Maintenance deployments within a fixed
+bound. Retained `SUCCESS` deployments do not veto a retry, because successful
+one-shot processes can keep that status after exit. This check is not proof that
+all processes have exited. A fresh Railway deployment may interrupt an older
+process; the consumer's lock serializes database work but cannot prevent that
+interruption. Inspect partial non-atomic migrations and repair them through a
+reviewed developer procedure outside the workflow. See [recovery](docs/security-recovery.md).
 
-- [How the action works](docs/how-it-works.md): ordering, records, reruns and limits.
-- [Configuration reference](docs/configuration.md): every input and data contract.
-- [Security, recovery and upgrades](docs/security-recovery.md): privileges and failures.
-- [Examples](docs/examples.md): two independent fictional consumers and receipts.
+## Legacy compatibility and more
+
+Version 1 deploys schema then application. Version 2 `schema-only` submits only
+Maintenance but keeps the legacy GitHub history, ACL receipt and recovery rules.
+Their reruns observe existing IDs; those rules do not apply to version 3. Existing
+records remain untouched and unread by v3. Adopting v3 requires an explicit
+reviewed policy and receipt change.
+
+- [How it works](docs/how-it-works.md): current attempts, observation bounds and legacy behavior.
+- [Configuration](docs/configuration.md): strict versioned policy and receipt contracts.
+- [Security and recovery](docs/security-recovery.md): privileges, failure handling and upgrades.
+- [Examples](docs/examples.md): fictional consumers and private-action download qualification.
 - [Contributing](CONTRIBUTING.md) and [security reporting](SECURITY.md).
 
 The code and associated documentation are available under the [MIT License](LICENSE).

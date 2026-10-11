@@ -1,20 +1,118 @@
 # Configuration reference
 
-All three action inputs are required:
+The policy selects the contract; only `policy` and `railway-token` are required for v3:
 
 | Input | Meaning |
 | --- | --- |
 | `policy` | Normalized relative path to a regular JSON file committed at the exact event SHA; all symlinks are refused. |
-| `github-token` | Caller `GITHUB_TOKEN`: contents read, actions read, deployments write. |
+| `github-token` | Required only for legacy v1/v2: contents read, actions read, deployments write. Unused in v3. |
 | `railway-token` | Project token scoped to the configured Railway environment. |
 
 The runner must provide Python 3.11 and Git. The action supports GitHub.com and the
 fixed Railway GraphQL endpoint; GitHub Enterprise Server and other providers are
 not implemented. Use a Linux runner with descriptor-relative, no-symlink file
 opens; the examples use GitHub-hosted Ubuntu. It has no action outputs. Its exit status indicates success or a
-blocked release; durable deployment records hold the identities and outcome.
+failed invocation. Version 3 uses the current provider attempt and receipt; only
+legacy v1/v2 retain GitHub deployment records.
+
+## Policy format 3: migrations-only
+
+[policy-v3.schema.json](../schemas/policy-v3.schema.json) is the primary contract.
+[Bookshop migrations](../tests/fixtures/bookshop-migrations.json) is a complete
+fictional example. All listed fields are required. Unknown fields, duplicate
+JSON keys, wrong types, incompatible versions and oversized input fail before
+provider mutation.
+
+| Field | Meaning |
+| --- | --- |
+| `format_version` | Integer `3`, independent of the action or receipt version. |
+| `mode` | Exactly `"migrations-only"`. |
+| `repository` | Exact trusted `owner/repository`. |
+| `branch` | Trusted push branch, normally `main`. |
+| `workflow` | Exact workflow path, such as `.github/workflows/release.yml`. |
+| `consumer` | Lowercase consumer identity for the receipt. |
+| `project_id`, `environment_id` | Exact Railway target UUIDs. |
+| `schema` | The Schema Maintenance service expectation object below. |
+
+There is no application target, historical application UUID or `acl_policy`.
+The schema object requires exactly `service_id` (UUID), `name`, `config` (null),
+`root_directory`, `start_command`, `healthcheck_path` (null), `restart_policy`
+(`"NEVER"`) and `public_http` (false). Preflight compares the service name,
+project/environment/service IDs, repository source, root directory and process
+settings. Railway must report no image source, pre-deploy command, HTTP domains,
+TCP proxies or config-file override, one replica and disabled native autodeploy.
+The provider config binding may be null or the literal empty string; the policy
+must use null. A null provider root is normalized to `/`. Disable Maintenance's
+Wait for CI separately; this setting is a consumer qualification requirement.
+
+The policy must be a regular committed blob at the exact `GITHUB_SHA`, with
+matching index, worktree bytes and executable mode and no symlink components.
+Use a normalized relative path; absolute paths, traversal, redundant separators,
+untracked files and staged/working changes are refused. The controller parses
+verified commit bytes, never a later reread of the working file. It validates
+push event, repository, branch, workflow path, run/attempt identifiers and checkout
+SHA locally. No GitHub API or branch-head lookup occurs in v3. Each trusted push
+SHA is executed even if the branch has subsequently advanced.
+
+As in the legacy modes, the exact candidate tree must contain no `railway.toml`
+or `railway.json` anywhere. The bounded scan and dashboard-only requirements
+below apply to v3 as well. Native service configuration and all consumer database
+permissions remain outside the action's authority.
+
+Each invocation waits for transient Maintenance deployments, submits exactly once
+at the event SHA, then observes only the returned UUID using Railway's direct
+`deployment(id: ...)` query. The active check uses a target-filtered `first: 1`
+query excluding `SUCCESS`, `FAILED`, `CRASHED`, `REMOVED` and `SKIPPED`, without a
+lifetime-history scan. `SUCCESS` may remain after a one-shot exits; it is not an
+activity lock or a cached result. A prior receipt never satisfies the new attempt.
+Failed/unknown submissions are not internally retried; another invocation starts
+fresh after the activity check. V3 neither reads nor writes legacy GitHub records.
+
+## Migration receipt v2
+
+Policy v3 requires [receipt-v2.schema.json](../schemas/receipt-v2.schema.json).
+The consumer emits exactly one `DJANGO_RELEASE_RESULT ` line with this strict
+JSON shape **after its command's work has completed successfully**:
+
+```json
+{
+  "format_version": 2,
+  "repository": "example-bookshop/bookshop",
+  "consumer": "bookshop",
+  "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "project_id": "11111111-1111-4111-8111-111111111111",
+  "environment_id": "12222222-2222-4222-8222-222222222222",
+  "service_id": "13333333-3333-4333-8333-333333333333",
+  "deployment_id": "55555555-5555-4555-8555-555555555555",
+  "migrations_verified": true
+}
+```
+
+These values are fictional. Obtain and verify actual source and provider identities
+inside the consumer command; do not copy an example into a success printer.
+`migrations_verified` means the complete expected migration graph is applied.
+Emit success only after all work the consumer command requires has passed, including
+its own permission checks if present. This receipt makes no generic ACL,
+provisioning or runtime-health claim, and contains no `acl_verified` or `acl_policy`.
+Receipt v1 remains unchanged and is required by legacy policies v1/v2.
+
+Success requires exact target, SHA and returned deployment ID, provider status
+`SUCCESS` or `REMOVED`, and this matching current receipt. `FAILED`, `CRASHED` and
+`SKIPPED` fail before reading logs, even if a success-looking receipt exists.
+Unknown/cancelled states fail. Build/queue states keep polling without reading
+logs. A receipt alone cannot pass a non-successful deployment. A removed deployment
+without the receipt cannot pass either.
+
+The log window must contain fewer than 500 lines and a result at most 4 KiB.
+Missing results keep polling to the fixed timeout. Malformed, duplicate,
+wrong-version, wrong-identity or extra-field receipts fail. Any
+`DJANGO_RELEASE_FAILURE ` marker fails v3, including the legacy failure-v1
+consumer diagnostic. Mixed success and failure cannot pass. These checks do not
+implement migrations, database locking, permissions or developer repair procedures.
 
 ## Policy format 1
+
+**Legacy compatibility only.** The remainder of this section describes v1.
 
 [policy-v1.schema.json](../schemas/policy-v1.schema.json) is the executable field
 contract. [Bookshop](../tests/fixtures/bookshop.json) is a complete example.
@@ -86,6 +184,8 @@ variable substitutions, secret fields, optional command hooks or automatic defau
 
 ## Policy format 2: schema-only
 
+**Legacy compatibility only.** V2 retains the history and ACL contract.
+
 [policy-v2.schema.json](../schemas/policy-v2.schema.json) requires
 `format_version: 2` and `mode: "schema-only"`. Keep the version-1 repository,
 branch, workflow, consumer, project/environment, schema and ACL-policy fields.
@@ -121,6 +221,8 @@ application records and are not represented as application verification success.
 
 ## Maintenance receipt
 
+This receipt-v1 section applies only to legacy policies v1/v2.
+
 The consumer's maintenance process emits one single-line JSON object after its
 full migration graph and ACL checks pass, prefixed by `DJANGO_RELEASE_RESULT `.
 [receipt-v1.schema.json](../schemas/receipt-v1.schema.json) defines its fields:
@@ -153,6 +255,9 @@ cannot authorize application submission. Logs and process exit alone cannot supp
 the meaning of these checks; your command and database tests must establish it.
 
 ## Maintenance failure result
+
+This bound failure-v1 recovery contract applies to legacy v1/v2. V3 treats any
+failure marker as a failed invocation and writes no records.
 
 A consumer may emit one single-line `DJANGO_RELEASE_FAILURE ` JSON object after
 its trusted source and provider identity checks succeed. The strict
@@ -200,6 +305,8 @@ formats remain unchanged. Older action pins do not recognize failure results;
 upgrade the controller before relying on them.
 
 ## Release records
+
+Legacy v1/v2 only. V3 never reads, validates, rewrites or appends these records.
 
 [record-v1.schema.json](../schemas/record-v1.schema.json) defines the immutable
 deployment payload. It binds `format_version: 1`, `repository`, `consumer`, `phase`,

@@ -1,19 +1,19 @@
 name: Django release
-description: Verify exact-SHA Schema Maintenance on Railway; policy v1 also deploys the application, while v2 is schema-only.
+description: Run fresh exact-SHA Django migrations on Railway and verify the current attempt; legacy v1/v2 remain supported.
 inputs:
   policy:
-    description: Path to a committed JSON policy (v1 schema and application, or explicit v2 schema-only).
+    description: Path to a committed JSON policy (v3 migrations-only, or legacy v1/v2).
     required: true
   github-token:
-    description: Caller GITHUB_TOKEN with contents read, actions read, and deployments write.
-    required: true
+    description: Required only for legacy v1/v2, with contents read, actions read, and deployments write. Unused by v3.
+    required: false
   railway-token:
     description: Railway project token scoped to the consumer environment.
     required: true
 runs:
   using: composite
   steps:
-    - name: Run the policy-selected schema-only or schema and application release
+    - name: Run the policy-selected migration or legacy release
       shell: bash
       env:
         RELEASE_POLICY: ${{ inputs.policy }}
