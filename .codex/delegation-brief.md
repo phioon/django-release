@@ -2,7 +2,8 @@
 
 Use native subagents with the active client's model, reasoning, provider and
 authentication. Before dispatch, the coordinator creates a plain JSON declaration
-at project-root `.codex-delegations/<task_name>.json`. This directory is beside
+at the active harness root's `.codex-delegations/<task_name>.json`. This directory
+is beside
 `.codex`, outside the protected configuration directory. `task_name` must contain
 1–64 lowercase ASCII letters, digits or underscores and match the native spawn's
 `task_name` exactly. Formats without that visible field are explicitly unsupported
@@ -13,7 +14,7 @@ rewrite the native message. A valid file does **not** prove that its content
 matches the message, that the child can identify itself or that the worker read
 or followed the declaration. The coordinator must check those conditions.
 `SubagentStart` instructs the worker to require one exact coordinator-supplied
-declaration pointer in its native task message: project-root-relative
+declaration pointer in its native task message: harness-root-relative
 `.codex-delegations/<task_name>.json`, where the name matches `[a-z0-9_]{1,64}`.
 The worker reads that record and compares objective, writable scope, dependencies
 and checks with the assigned task. A missing, ambiguous, unsafe, unreadable or
@@ -32,14 +33,19 @@ Actual behavior still requires a real client fixture.
 
 ## Prepare each dispatch
 
-1. Create an ordinary `.codex-delegations` directory at the same project root
-   that contains the installed `.codex/hooks/subagents.py`. Do not use a symlink.
+1. Identify the active harness root that owns the executing
+   `.codex/hooks/subagents.py`. Create its ordinary `.codex-delegations` directory
+   beside `.codex`; do not use a symlink. This can be a non-Git coordination root
+   above the software repository, rather than that repository's Git root.
 2. Choose a native task name, such as `parser_fix`. Write the complete declaration
    below into `.codex-delegations/parser_fix.json` as **raw JSON**, without Markdown
    fences. Finish writing before dispatch; keep it unchanged until the worker ends.
 3. Call the native spawn tool with `task_name: "parser_fix"`. Its task message
-   must include exactly one declaration pointer, for example:
-   `Read the project-root declaration .codex-delegations/parser_fix.json before work.`
+   must name the harness root and include exactly one declaration pointer, for example:
+   `Harness root: <absolute harness root>. Read .codex-delegations/parser_fix.json before work.`
+   Name the software repository and command directory separately. State the base
+   of writable/read paths and resource paths in existing `context`/`instructions`.
+   Changing directory for software work must not reinterpret the declaration pointer.
    Keep model/provider/authentication and permissions under native control.
 4. Verify the actual native spawn name and declaration, the child's observed read,
    and its actual diff/checks/report. Compare trusted child identity when available;
@@ -52,6 +58,15 @@ The hook does not write, consume or delete records, track timestamps or freshnes
 create a ledger or schedule retries. Old valid records can still pass validation;
 the coordinator remains responsible for their relevance and cleanup. Do not place
 credentials or secrets in declarations.
+
+For an umbrella guard at `workspace/.codex/hooks/subagents.py`, a service task reads
+`workspace/.codex-delegations/name.json`, while software checks run in
+`workspace/service`. Declare paths such as `service/src/parser.py` as relative to
+the harness root. A standalone service guard instead uses
+`workspace/service/.codex-delegations/name.json`. Inspect the client's active hook
+sources if both guards might load; matching hooks accumulate. Do not mirror records
+or fall back to another declaration root. The examples below assume the software
+repository and harness root coincide, with all paths relative to that root.
 
 A writer's `.codex-delegations/parser_fix.json`:
 
@@ -131,7 +146,7 @@ and why. Empty arrays mean none. A blocked report is valid:
   "checks": ["Declaration read: not performed; no exact pointer was supplied. No task work performed."],
   "risks": ["Native identity binding unverified."],
   "blockers": ["Missing explicit declaration pointer."],
-  "next_action": "Coordinator supplies the exact safe project-root-relative record path."
+  "next_action": "Coordinator supplies the exact safe harness-root-relative record path."
 }
 ```
 
@@ -140,12 +155,14 @@ and why. Empty arrays mean none. A blocked report is valid:
 Merge supplied `.codex/hooks.json` entries without replacing existing hooks.
 Copy `.codex/hooks/subagents.py` into the project and this contract to
 `.codex/delegation-brief.md`. The commands use Python 3.11+ as `python3` and a
-quoted Git-root path, supporting starts inside subdirectories. The safe reader
+quoted Git-root path, supporting starts inside subdirectories. Explicit non-Git
+installation uses the quoted absolute script path for that harness root, including
+when its command runs from a nested child Git repository. The safe reader
 requires POSIX directory-relative opens, `O_NOFOLLOW`, `O_DIRECTORY` and
 `O_NONBLOCK`; unsupported platforms are denied. The declaration directory and
 leaf file cannot be symlinks; nonregular files, including FIFOs, are denied
-without waiting for a writer. Paths derive from the script's own project root,
-not the payload's `cwd` or session working directory.
+without waiting for a writer. Declaration paths derive from the executing script's
+own harness root, not the software Git root, payload `cwd` or session working directory.
 
 Review and trust hook definitions through the client's supported UI; never
 write trust hashes. Changed definitions may require renewed trust. Roll back by
