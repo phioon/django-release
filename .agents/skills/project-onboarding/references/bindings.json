@@ -1,0 +1,15 @@
+{
+  "bindings_version": 1,
+  "project": "garden",
+  "workflow": "/example/tools/agent-workflow",
+  "source_root": "/example/projects/garden",
+  "task_root": "/example/tasks/garden",
+  "repositories": {
+    "app": "/example/projects/garden/app"
+  },
+  "control_root": "/example/local-state/garden-workflow",
+  "skill_path": "/example/codex/skills/project-onboarding",
+  "credential": {
+    "environment": "GARDEN_WORKFLOW_TOKEN"
+  }
+}

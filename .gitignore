@@ -221,3 +221,8 @@ __marimo__/
 
 # Graphify generated output
 graphify-out/
+
+# Local Codex preferences and trust remain outside Git.
+.codex/config.toml
+AGENTS.override.md
+.codex-delegations/

@@ -38,3 +38,4 @@ __pycache__/
 vendor/
 *.ex4
 *.ex5
+.codex-delegations/

@@ -41,3 +41,5 @@ GitHub has applied them.
 
 The code and associated documentation are licensed under the [MIT License](LICENSE).
 By submitting a contribution, you agree to license it under the same MIT License.
+
+For Codex contributors, see [project setup and qualification](docs/codex-workflow.md).
