@@ -1,0 +1,111 @@
+{
+  "project_version": 1,
+  "id": "garden",
+  "boundary": "single",
+  "mode": "independent",
+  "workflow_revision": "1111111111111111111111111111111111111111",
+  "repositories": {
+    "app": {
+      "github": "fictional-garden/app",
+      "remote": "origin",
+      "target": "main"
+    }
+  },
+  "policy": {
+    "artifacts": {
+      "template.toml": "model = @@MODEL@@\nmodel_reasoning_effort = @@EFFORT@@\n\n[agents]\nenabled = true\n",
+      "builder.toml": "name = \"builder\"\ndescription = \"Fixture builder\"\ndeveloper_instructions = \"Change only assigned files.\"\n"
+    },
+    "profile": {
+      "runtime_profile_version": 2,
+      "id": "garden",
+      "repositories": {
+        "app": {
+          "remote": "origin",
+          "target": "main"
+        }
+      },
+      "branch_prefix": "work/",
+      "policy_references": [
+        "project-definition:policy"
+      ],
+      "routing": {
+        "mode": "profile-pairs",
+        "routes": {
+          "standard": {
+            "model": "approved-example-model",
+            "effort": "high"
+          }
+        }
+      },
+      "codex": {
+        "template": {
+          "path": "template.toml"
+        },
+        "roles": {
+          "builder": {
+            "source": {
+              "path": "builder.toml"
+            },
+            "read_only": false
+          }
+        },
+        "targets": {
+          "app": {
+            "route": "standard",
+            "roles": [
+              "builder"
+            ]
+          }
+        }
+      },
+      "lifecycle": {
+        "adapter": "github-v1",
+        "verification": {
+          "app": {
+            "commands": [
+              {
+                "argv": [
+                  "python3",
+                  "-I",
+                  "-B",
+                  "-c",
+                  "print(\"checked\")"
+                ],
+                "timeout_seconds": 10
+              }
+            ],
+            "required_environment": [],
+            "hosted_contexts": []
+          }
+        },
+        "documentation": {
+          "homes": [
+            "app"
+          ],
+          "reviewers": [
+            "reviewer"
+          ],
+          "owners": [
+            "writer"
+          ],
+          "require_review": true
+        },
+        "publication": {
+          "repositories": {
+            "app": "fictional-garden/app"
+          },
+          "commit_identity": {
+            "name": "Example Agent",
+            "email": "example@example.invalid"
+          },
+          "creator": {
+            "login": "example-bot",
+            "id": 123,
+            "type": "Bot"
+          }
+        }
+      }
+    }
+  }
+}
