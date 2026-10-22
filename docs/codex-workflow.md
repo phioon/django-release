@@ -4,7 +4,7 @@ This guide covers development tooling, not release-controller behavior or deploy
 authority. Public product contracts remain in this repository. The baseline is
 [Vibe Coding Toolkit Prompt 12 at `790a895`](https://github.com/soumatheusgomes/vibe-coding-toolkit/blob/790a895304e0c08b70a5b215c9d334f1c86b816c/docs/prompts/12-existing-project-setup.md),
 its [Codex guide](https://github.com/soumatheusgomes/vibe-coding-toolkit/blob/790a895304e0c08b70a5b215c9d334f1c86b816c/docs/tools/15-codex-workflow.md),
-and [subagent policy](https://github.com/soumatheusgomes/vibe-coding-toolkit/blob/790a895304e0c08b70a5b215c9d334f1c86b816c/docs/tools/02-subagent-orchestration.md).
+and the [Vibe Setup v0.1.0 delegation policy](../.codex/delegation-brief.md).
 Resolve and compare newer upstream revisions before updating this integration.
 
 ## Configure and review
@@ -21,8 +21,11 @@ observed discovery and execution, not merely files in the repository.
 If `.codex/config.toml` does not exist, copy `.codex/config.example.toml` to it.
 Otherwise merge the supported agents settings after reviewing the existing file;
 keep an explicit positive `max_concurrent_threads_per_session` limit. The local
-configuration is ignored by Git. Its native skill selector disables the retained
-legacy `project-onboarding` procedure without deleting its historical files.
+configuration is ignored by Git. Its native skill selector requests disabling the
+retained legacy `project-onboarding` procedure without deleting historical files.
+Verify discovery and selection in the actual client; a disabled configuration
+entry alone does not prove suppression. Do not use that legacy procedure for new
+Vibe tasks.
 Do not overwrite custom settings or copy credentials.
 
 Review `.codex/hooks.json`, `.codex/hooks/subagents.py` and
@@ -32,6 +35,15 @@ hook definitions through the client's supported review surface. CLI provides
 again when their contents change; definition trust is not a script-integrity check.
 Inspect all active sources to avoid duplicate handlers. Do not bypass trust or edit
 trust records directly. Restart a session only when needed to load changes.
+
+Follow [the contributor lifecycle](../AGENTS.md#vibe-task-lifecycle) for verified
+worktrees, recoverable setup, authorized PR delivery and post-merge cleanup.
+Ordinary tasks use the installed helper without repeating complete onboarding.
+Assign each worker a role and separate specialty from the installed contract;
+these labels never select a native profile or change execution settings. Unknown
+roles are rejected; custom nonempty specialties need their own assessment evidence.
+The [optional display adapter](../.codex/native-display.md) is installed inert.
+Reuse an already qualified user-level integration; do not add another wrapper.
 
 Before each spawn, write the exact bounded JSON declaration to the root
 `.codex-delegations/<task_name>.json` and use that native task name. Include exactly

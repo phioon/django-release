@@ -13,6 +13,7 @@ SPAWN = re.compile(r"^(spawn_agent|Agent|collaboration[.]?spawn_agent|multi_agen
 BRIEF_FIELDS = {"objective", "context", "instructions", "allowed_files",
                 "mutable_resources", "dependencies", "acceptance", "checks",
                 "read_only", "budget"}
+ROLES = {"Coordinator", "Scout", "Builder", "Tester", "Reviewer", "Scribe", "Investigator"}
 REPORT_FIELDS = {"status", "summary", "changed_files", "checks", "risks",
                  "blockers", "next_action"}
 ERROR = (
@@ -96,7 +97,11 @@ def strings(value, nonempty=False):
 
 
 def valid_brief(brief):
-    if not isinstance(brief, dict) or set(brief) != BRIEF_FIELDS:
+    if not isinstance(brief, dict) or set(brief) - {"role", "specialty"} != BRIEF_FIELDS:
+        return False
+    if "role" in brief and (not isinstance(brief["role"], str) or brief["role"] not in ROLES):
+        return False
+    if "specialty" in brief and not text(brief["specialty"]):
         return False
     if not all(text(brief[key]) for key in ("objective", "context", "instructions")):
         return False
@@ -115,14 +120,14 @@ def valid_brief(brief):
             and type(budget["attempts"]) is int and 1 <= budget["attempts"] <= 5)
 
 
-def read_brief(task_name):
+def read_brief(task_name, project=PROJECT):
     if (os.name != "posix" or os.open not in os.supports_dir_fd
             or any(not hasattr(os, flag) for flag in ("O_DIRECTORY", "O_NOFOLLOW", "O_NONBLOCK"))):
         raise ValueError("safe declaration open requires POSIX")
     if not isinstance(task_name, str) or not re.fullmatch(r"[a-z0-9_]{1,64}", task_name):
         raise ValueError("unsupported task name")
     # Directory-relative opens prevent traversal; nonblocking open avoids FIFO hangs.
-    directory = os.open(PROJECT / ".codex-delegations", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    directory = os.open(project / ".codex-delegations", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         descriptor = os.open(task_name + ".json", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
                              dir_fd=directory)
