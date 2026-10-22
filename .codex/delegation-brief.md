@@ -1,7 +1,324 @@
-# Native Codex delegation contract
+# Delegation policy and execution contract
 
-Use native subagents with the active client's model, reasoning, provider and
-authentication. Before dispatch, the coordinator creates a plain JSON declaration
+This is an agent-facing policy and native delegation contract, with an overview
+for users. Setup installs it as `.codex/delegation-brief.md` and links it from
+`AGENTS.md`; agents must read the applicable instructions before delegation.
+The hooks validate JSON declarations/reports, not this Markdown file.
+
+Vibe Setup owns route preference, coordinator responsibilities and the native
+contract below. [Local Model Delegation](https://github.com/fcoouto/local-model-delegation)
+owns local model discovery, assessment, capacity, execution and verification.
+Its procedures stay in that project. The user's authorization and active project
+instructions govern both routes; availability alone grants no authority.
+
+- [Choose the execution route](#choose-the-execution-route)
+- [Role and specialty](#role-and-specialty)
+- [Task and specialty guide](#task-and-specialty-guide)
+- [Role visibility in Habblaud](#role-visibility-in-habblaud)
+- [Demonstrated ability versus runtime capacity](#demonstrated-ability-versus-runtime-capacity)
+- [Discover models and check capacity](#discover-models-and-check-capacity)
+- [Local proposal and native fallback workflow](#local-proposal-and-native-fallback-workflow)
+- [What enforces each rule](#what-enforces-each-rule)
+- [See the effective policy and current work](#see-the-effective-policy-and-current-work)
+- [Native dispatch and report contract](#native-codex-delegation-contract)
+
+## Choose the execution route
+
+Codex remains the coordinator: it owns scope, required tool actions, acceptance
+checks and integration. Delegate a bounded task when independent work,
+specialization or context isolation justifies the coordination cost.
+
+**Prefer eligible local models over paid/native model execution for suitable
+delegated tasks.** Local eligibility requires installed and enabled routing,
+owner approval, demonstrated ability for the task, safe runtime capacity and
+supported verification. Resolve eligibility through the plugin's own contract.
+Do not infer ability
+from a model's name, parameter count or advertised context window. A discovery
+result, installed plugin or assessment result alone is not approval.
+
+If local routing is disabled or the plugin cannot qualify the task, retain
+authorized native execution. For busy capacity or recovery, follow the plugin's
+current workflow rather than inventing a separate Vibe scheduler. Keep small tasks
+with the coordinator when delegation overhead is not justified.
+
+Explicit local prohibitions or native-only instructions override this preference.
+Preserve the coordinator's native model, reasoning, provider, authentication and
+permissions. Reuse existing approvals; ordinary task delegation does not authorize
+installation, assessment, new approvals or route activation. Do not weaken task
+requirements to fit a local model, or claim savings without evidence.
+
+## Role and specialty
+
+Assign a **Role** for responsibility and a **Specialty** for the knowledge and
+checklist the assignment needs. Keep **Status** separate: a Builder running tests
+is still a Builder. Roles belong to assignments, not permanently to models or
+people. Use these exact, case-sensitive role names:
+
+| Role | Responsibility |
+| --- | --- |
+| Coordinator | Own scope, delegation, acceptance and integration. |
+| Scout | Explore code and map dependencies. |
+| Builder | Implement changes. |
+| Tester | Verify behavior and edge cases. |
+| Reviewer | Independently inspect changes. |
+| Scribe | Maintain documentation. |
+| Investigator | Diagnose failures and evaluate approaches. |
+
+The existing main agent is the Coordinator; do not spawn a placeholder child to
+give it a badge. Choose one role per assignment and keep it stable for that
+assignment. Multiple roles can share a specialty, for example Builder and Reviewer
+with Security-sensitive work. Independent review still requires a different
+agent from the writer; changing a writer's label does not supply independence.
+
+A role describes responsibility, not demonstrated competence, authority or an
+execution profile. It never selects a model, provider, reasoning effort, routing,
+authentication, tools or permissions. Preserve the approved execution settings.
+This vocabulary does not create a fixed agent roster or require delegation.
+
+For new native declarations, supply `role` and `specialty` alongside the existing
+fields. The guard accepts legacy declarations without either field; missing
+metadata means unspecified, not inferred from a task name or model. Before using
+the new fields in a destination project, check its installed guard: older guards
+reject extra keys. Review and update the guard and guide together, preserving
+customizations. Until then, put the labels in existing `instructions` text without
+claiming structured metadata or badge delivery. Do not edit an active declaration.
+
+### Local-model handoff
+
+The coordinator carries the same assignment metadata to local execution and native
+fallback: `{"role": "Reviewer", "specialty": "Security-sensitive work"}`. This is
+a portable handoff pair, not a new local brief schema or capability identifier.
+Keep it separate from the actual model, source/provider, assessment and task state.
+The local plugin owns storage, visibility transport and any presentation binding.
+
+Use only fields supported by the installed plugin. For schema-2 local briefs
+without dedicated metadata support, include `Role: Reviewer. Specialty:
+Security-sensitive work.` in the existing `behavior_contract`; do not add unknown
+top-level keys. Include it before submission, within the approved input budget;
+do not rewrite a submitted brief or its identity/hash to change a badge. A plugin
+adapter may consume the explicit pair through its own supported interface, but
+Vibe does not infer a role from the model or duplicate the plugin's job registry.
+Local proposals still require native verification; a role grants no capability.
+
+## Task and specialty guide
+
+A specialty identifies the knowledge and checklist a task needs. It does not
+name a model, grant tools or certify competence. Use this guide to describe the
+actual assignment, then match it to the model's recorded assessment scope.
+
+The default status below is **Not assessed** because this portable guide supplies
+no per-model assessment evidence. It is not a live inventory or a claim that every
+installed model lacks these abilities. Update a model/task pair's status in the
+private setup record only from matching evidence; do not certify an entire
+specialty from one narrow success.
+
+| Common role | Specialty | Representative task | Required demonstration | Default evidence status |
+| --- | --- | --- | --- | --- |
+| Scout | Code exploration | Explain supplied code and its callers. | Source-grounded claims, correct relationships and explicit context limits. | **Not assessed** |
+| Scribe | Documentation | Update a function's usage example. | Accurate behavior, preserved constraints and checked examples. | **Not assessed** |
+| Builder | Implementation | Fix a known defect with a clear contract. | Regression fixed, surrounding behavior preserved and relevant checks passed. | **Not assessed** |
+| Tester | Test engineering | Add boundary and failure-case tests. | Tests derived from requirements that detect relevant faulty behavior, not merely pass. | **Not assessed** |
+| Reviewer | Code review | Find regressions in a bounded change. | Known defects detected, missed defects and false positives evaluated, with connected callers considered. | **Not assessed** |
+| Investigator | Diagnosis and design | Investigate an ambiguous failure or compare structural changes. | Evidence-backed hypotheses, alternatives and independently checked conclusions. | **Not assessed** |
+| Reviewer | Security-sensitive work | Review authorization or possible data exposure. | Dedicated domain assessment with adversarial cases; generic coding results are insufficient. | **Not assessed** |
+
+Classify the concrete task's complexity, ambiguity, dependencies, context needs
+and verification effort. Consider risk separately: a one-line authorization
+change can require more scrutiny than a larger mechanical edit. These rows are
+task guidance, not new plugin capability identifiers or a fixed agent roster.
+The common roles are examples, not an exclusive mapping between role and specialty.
+
+For example, a frontend label change, a state-synchronization fix and an
+authentication-boundary redesign need different demonstrations. Approval for the
+first does not establish ability for the others. Successful implementation also
+does not establish review ability. A bounded subtask can qualify without granting
+the model a broad specialist title.
+
+## Role visibility in Habblaud
+
+Role declarations guide agents; they do not automatically populate a dashboard.
+The optional [native display adapter](native-display.md) forwards a bound assignment
+role through the existing Habblaud hook when native `agent_role` is absent or null.
+It preserves any supplied native role and does not change Habblaud or execution
+settings. Installation and live delivery require separate qualification.
+Keep Habblaud unchanged and qualify its existing input path separately. Inspection
+and disposable source/DOM probes against Habblaud 1.0.3
+([`faa1a012`](https://github.com/marmottajr/habblaud/tree/faa1a012b5fbf632c66dc6801c5383e53a542406))
+on 2026-10-22 established the following behavior; recheck it when the installed version changes:
+
+| Path | Observed behavior |
+| --- | --- |
+| Native child rollout | Habblaud reads `agent_role` or `agent_type` from supported spawn metadata; role text is limited to 40 characters. |
+| Existing Codex hook endpoint | A child's first `agent_type` can supply the visible role. A longer composite survives the hook path. |
+| Already visible child | The displayed role stays fixed. Later hooks or newly discovered rollout role metadata do not relabel it. A rollout role seen first takes precedence over the hook label. |
+| Main agent | Source and badge rendering use fixed main-agent labels. `Coordinator` is an assignment role, but this version cannot display it as the main badge through these inputs. |
+
+The [rollout parser](https://github.com/marmottajr/habblaud/blob/faa1a012b5fbf632c66dc6801c5383e53a542406/server/sources/codex/rollout.ts),
+[Codex source](https://github.com/marmottajr/habblaud/blob/faa1a012b5fbf632c66dc6801c5383e53a542406/server/sources/codex/source.ts)
+and [badge renderer](https://github.com/marmottajr/habblaud/blob/faa1a012b5fbf632c66dc6801c5383e53a542406/client/src/ui/widgets.ts)
+are the compatibility references. These fixtures establish parsing and rendering,
+not delivery from every Codex client or a live Docker/Node installation.
+
+Inspect the active client's actual spawn schema. A native `agent_type` may select
+a configuration profile with different models or permissions; never use one just
+to obtain a badge. When a client exposes no independent role metadata field,
+retain the role in the declaration/instructions. The optional adapter can supply
+the missing display label; without observed delivery, report it as unverified.
+Do not invent spawn parameters, rewrite session logs,
+change native profiles or emit synthetic workers to conceal that limitation.
+
+Native and local workers use the same display format:
+`<Role> · <Model Display Name>`, for example `Reviewer · Qwen3.8 27B Splash`.
+Use the explicit assignment role and the human-readable name of the actual
+attempt's model: display `Qwen3.8 27B Splash`, not `qwen3.8-27b-splash`. Prefer
+existing model display metadata; otherwise format the actual model identifier
+for display without changing its stored identity or selection. Do not add a
+`LOCAL` marker, provider, route or specialty to the badge. Keep role and specialty
+separate in assignment metadata. For legacy assignments without a role, display
+`Unspecified role`; this is a display placeholder, not a stored role value.
+Do not infer the role from the model name or execution route.
+
+For local workers, the plugin owns the existing-hook adapter and sends the full
+display label on the first observation of the real attempt. Pass the canonical
+role and specialty separately to that adapter. Keep the complete values in the
+assignment metadata: Habblaud can visually ellipsize long badges from the right,
+and native rollout parsing has the 40-character limit above. Hover text retains
+the full hook label. These transport limits do not authorize a different label
+format for local and native workers.
+
+Native session data can also populate the agent's **Stats > Model** field.
+The existing Codex hook endpoint ignores the event's `model` field, so hook-only
+local workers cannot populate it through that path. Keep Habblaud unchanged and
+report local model Stats as unavailable; the badge's model display name does not
+establish Stats support. Do not fabricate native session data to fill that field.
+
+Existing hooks still attach local characters to the Codex provider/account.
+Stop, interruption and expired hook presence can
+look like successful completion. A role label does not fix these identity or
+lifecycle limitations; the plugin must document them and own transport testing.
+Vibe neither installs that adapter nor changes local routing. Coordinator badge
+support remains unavailable under the unchanged-Habblaud constraint.
+
+## Demonstrated ability versus runtime capacity
+
+| Dimension | Question it answers | Evidence to use |
+| --- | --- | --- |
+| Role | What responsibility does this assignment carry? | Its explicit assignment and ownership; no competence claim. |
+| Specialty | What knowledge and checklist does this assignment require? | The task, domain constraints and acceptance criteria. |
+| Demonstrated ability | Has this model met comparable requirements within this scope? | Matching model/version assessment results, including task type, language, complexity, context limits and failures. |
+| Runtime capacity | Can the approved model safely execute this task now? | The plugin's current admission and resource evidence. |
+
+Free memory or an idle slot does not demonstrate ability. A qualified model can
+still be temporarily busy. Neither dimension grants approval or enables routing.
+Prefer local execution only when task fit, approval, enabled routing, verification
+and runtime admission all satisfy the current plugin contract.
+
+Read Local Model Delegation's [assessment workflow](https://github.com/fcoouto/local-model-delegation/blob/main/skills/setup/SKILL.md)
+and [assessment/verification contracts](https://github.com/fcoouto/local-model-delegation/blob/main/skills/local-delegation/references/contracts.md)
+at the installed version to locate and interpret evidence. Published assessment
+cases describe what can be tested; saved per-model results establish what was
+demonstrated. Neither a fixture nor passing package unit tests proves that a model
+passed the assessment. Assessment procedures and results remain owned by the plugin.
+
+When reporting a model/task match, show the specialty and concrete scope, evidence
+source/version, observed result and limits, approval/routing state, and runtime
+availability separately. Use **Not assessed** when matching evidence is absent;
+this means unknown, not incapable. Report failed, stale or out-of-scope evidence
+explicitly rather than presenting it as a pass. No matching evidence means no
+local qualification for that task; retain authorized native execution. Do not run
+new assessments without the required consent or infer a model's level from its name.
+
+## Discover models and check capacity
+
+### Native models
+
+Inspect the active client's actual spawn tool, supported model/effort choices,
+and effective session, subagent-default and role settings. A client model catalog
+can help discover choices, but the actual spawn interface determines which are
+supported for delegation. Never copy a model list from another machine or client.
+Use a task-authorized model and reasoning effort; otherwise preserve the active
+session's settings. Where supported, set both explicitly when preservation is
+required. Where the host requires inheritance, use that supported path and inspect
+effective defaults. An omitted model is not proof of inheritance when defaults or
+roles override it. Report settings that the host cannot expose as unverified.
+
+Vibe's installer preserves existing model/effort choices. Its default limit of
+three native children is a native concurrency setting, not a local model capacity
+measurement. The hook neither discovers models nor checks the selected model.
+
+### Local models
+
+Read Local Model Delegation's [agent workflow](https://github.com/fcoouto/local-model-delegation/blob/main/skills/local-delegation/SKILL.md)
+and [task/verification contracts](https://github.com/fcoouto/local-model-delegation/blob/main/skills/local-delegation/references/contracts.md).
+They define discovery, approval scope, model capability, input limits, capacity,
+queueing, runtime support and current limitations. Vibe does not maintain copies
+of their commands, schemas, model inventories or release-specific restrictions.
+
+The links are repository entry points. For execution, use the installed plugin's
+bundled docs and command help, or the repository revision matching that release.
+Do not apply `main` instructions to an older installation without checking
+compatibility. Record the inspected version/source in the existing private setup
+record. If matching instructions or eligibility evidence are unavailable, retain
+native execution and report the gap; do not guess or upgrade implicitly.
+
+## Local proposal and native fallback workflow
+
+Follow the linked plugin workflow for submission, waiting, verification, recovery
+and fallback bookkeeping. Vibe's coordinator supplies the active project constraints,
+resolves dependencies and file ownership, verifies results, and owns integration.
+Local output remains a proposal until verified; the project's required checks
+and independent review still apply before accepting the overall change.
+
+If that workflow selects native fallback, obey the [native contract below](#native-codex-delegation-contract)
+in addition to the plugin's dispatch/reconciliation protocol. Use the permitted
+native model/effort and preserve the plugin's task identity; do not create a second
+job or bypass either contract. If a permitted native worker is unavailable, the
+coordinator retains the task and reports the limitation.
+
+## What enforces each rule
+
+The native hooks apply only when trusted, loaded and actually invoked by the
+client. **Local HTTP proposals do not invoke native subagent hooks.** Do not create
+a fake native task or force local output into the native report format.
+
+| Rule | Automated check | Coordinator must verify |
+| --- | --- | --- |
+| Native dispatch brief | `PreToolUse` checks a safe task name, bounded JSON schema and readable declaration. | Assignment agreement, freshness, useful scope, dependencies and the worker's observed read. |
+| Worker instructions | `SubagentStart` supplies the read/report procedure; it cannot veto the start. | Worker follows the scope; compare trusted task identity when available, otherwise disclose unverified binding. |
+| Native final report | `SubagentStop` checks structure and requests one correction when the retry flag permits. | Truth of changes, checks, blockers and completion. |
+| Model selection | Native client validates supported requests. Local eligibility is governed by the linked plugin contract. Vibe hooks do not check model choice. | Authorization, actual model/effort, full task fit, relevant constraints and any unavailable evidence. |
+| Writes, budgets and ownership | Native declarations have structural consistency/bounds; they are not access controls, timers or cross-worker locks. | Disjoint writers, real permissions, budgets, safe takeover, source freshness and final integration. |
+| Quality and safety | Native hooks check report structure only; local verification follows the linked plugin contract. | Semantic correctness, independent review when required, security/accessibility and destination checks. |
+
+Hook failures, untrusted definitions or unsupported client paths can leave native
+spawns unguarded. Unit tests establish handler behavior, not Desktop/VS Code
+interception. Local plugin discovery, approved-model execution, fallback and
+verification also need their own observed evidence. Neither route's evidence
+qualifies the other; do not claim end-to-end enforcement from installation alone.
+
+## See the effective policy and current work
+
+In a destination project, start at `AGENTS.md` and follow its link to
+`.codex/delegation-brief.md`. Setup must also link this guide from the project's
+existing documentation entry point; the installer does not edit those files.
+Keep a dated summary in the existing private setup/quality record: client/plugin
+versions, permitted routes, native model/effort evidence, local routing state,
+approved scopes and capacity evidence, active hook root/trust, tested behavior
+and unresolved gaps. Keep machine-specific model inventories out of this package.
+
+Users can ask: “Show this project's effective delegation policy, eligible local
+models and assessed limits, native fallback, and which controls were actually
+tested.” Answer from current evidence, marking missing information unknown.
+During work, distinguish selected route/model, waiting, verification and completion.
+For local status and visibility, follow the plugin's current workflow; missing
+evidence means unknown.
+
+## Native Codex delegation contract
+
+Use native subagents with the active client's provider, authentication and
+permissions. Inherit the coordinator's model and reasoning unless the user
+authorizes a scoped capability choice, such as the cleanup profile below.
+Before dispatch, the coordinator creates a plain JSON declaration
 at the active harness root's `.codex-delegations/<task_name>.json`. This directory
 is beside
 `.codex`, outside the protected configuration directory. `task_name` must contain
@@ -39,7 +356,8 @@ Actual behavior still requires a real client fixture.
    above the software repository, rather than that repository's Git root.
 2. Choose a native task name, such as `parser_fix`. Write the complete declaration
    below into `.codex-delegations/parser_fix.json` as **raw JSON**, without Markdown
-   fences. Finish writing before dispatch; keep it unchanged until the worker ends.
+   fences. Assign its role and specialty; keep the task name as the unique task
+   identity. Finish writing before dispatch; keep it unchanged until the worker ends.
 3. Call the native spawn tool with `task_name: "parser_fix"`. Its task message
    must name the harness root and include exactly one declaration pointer, for example:
    `Harness root: <absolute harness root>. Read .codex-delegations/parser_fix.json before work.`
@@ -72,6 +390,8 @@ A writer's `.codex-delegations/parser_fix.json`:
 
 ```json
 {
+  "role": "Builder",
+  "specialty": "Implementation",
   "objective": "Fix the parser's empty-list regression.",
   "context": "Read src/parser.py and tests/test_parser.py. Empty lists currently fail.",
   "instructions": "Read local instructions. Preserve other input handling and unrelated edits.",
@@ -90,6 +410,8 @@ An independent reader's `.codex-delegations/parser_review.json` for native
 
 ```json
 {
+  "role": "Reviewer",
+  "specialty": "Code review",
   "objective": "Review the parser change for regressions.",
   "context": "Read the working diff, src/parser.py and tests/test_parser.py.",
   "instructions": "Read local instructions. Report actionable findings with locations; make no writes. Avoid checks that create artifacts.",
@@ -103,10 +425,55 @@ An independent reader's `.codex-delegations/parser_review.json` for native
 }
 ```
 
+## Lightweight cleanup worker
+
+Post-merge cleanup must remain inexpensive. Use one bounded native worker on a
+lightweight compatible model available in the current authenticated client.
+Choose from the host's supported models and reasoning settings; do not hard-code
+a model family or version. Keep the coordinator's model/settings unchanged. Never
+add a provider, proxy, API billing path or credentials to obtain a cheaper model.
+If no suitable native choice is available, report the limitation and offer the
+helper's manual invocation; do not silently upgrade to an expensive worker.
+
+Python performs the factual safety checks and ordered deletions. The worker runs
+one lifecycle `resume` invocation from outside the target worktree, using the
+existing event ID and a fresh report of worktree ownership and stopped writers.
+The helper confirms every associated PR merged, checks the local worktree and
+branch identities, deletes remote refs conditionally, verifies absence, then
+removes the exact worktree without force. The worker must never substitute its
+own recursive deletion, force push, stale receipt or approval assertion.
+
+Declare a three-minute, one-attempt budget. Scope writable resources to the exact
+worktree, its recorded remote refs and its Git-common-directory lifecycle record;
+use `read_only=false` because cleanup has authorized mutations. Keep other tasks,
+branches, the primary checkout and local branch refs outside that scope. Respect
+`auto_cleanup=false` and whole-lifecycle opt-out before any deletion.
+
+Do not inspect the codebase, rerun project tests/builds, repeat independent review,
+spawn other workers, poll GitHub or create a recurring task for cleanup. Trigger
+only when reconciliation first observes merges, including after a human merge
+report. On a pending result, report the precise manual action and stop; retry only
+after new evidence or the requested action. Completed cleanup uses its recorded
+result and does not start another worker merely to recheck unchanged state.
+
+Return the existing compact report schema: observed merged PR count, remote refs
+confirmed absent, worktree removal status, evidence reference and any pending
+action. The coordinator reads that result and the bounded helper evidence; it does
+not repeat the full cleanup investigation with a larger model. These are workflow
+instructions, not hook-enforced model routing or proof of host ownership.
+
 ## Declaration schema
 
-The object contains exactly the fields shown. Duplicate keys, comments,
-non-finite numbers, extra fields and trailing commas are rejected. `objective`,
+The object requires all fields shown except `role` and `specialty`, which are
+optional for compatibility with existing declarations. New assignments should
+include both. When present, `role` is one exact name from the role table and
+`specialty` is a nonblank string of at most 4,096 characters. Either may be omitted
+independently. Unknown keys remain rejected; neither field changes native input,
+write scope, required checks or report validation. The guard validates their
+structure only, not assignment truth, model ability or dashboard delivery.
+
+Duplicate keys, comments, non-finite numbers, unknown fields and trailing commas
+are rejected. `objective`,
 `context` and `instructions` are nonblank strings. `allowed_files`,
 `mutable_resources`, `dependencies`, `acceptance` and `checks` are string arrays;
 only `acceptance` and `checks` must be nonempty. All strings have at most 4,096
