@@ -3,3 +3,7 @@ schema_version = 1
 [task_lifecycle]
 enabled = true
 auto_cleanup = true
+
+[worker_selection]
+enabled = true
+authorization_ref = "AGENTS.md#vibe-worker-selection"
