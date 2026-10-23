@@ -11,6 +11,32 @@ and run the checks in CONTRIBUTING.md. Consequential authority/recovery changes
 require independent review. Source changes grant no deployment, secret, repository
 settings, publication, or cleanup authority. Preserve other contributors' edits.
 
+## Shared Vibe workflow
+
+When the user explicitly adopts an enclosing coordination workspace, inherit its
+common Vibe instructions as described here. Otherwise retain this repository's
+standalone workflow below. Explicitly read the coordination workspace's
+`AGENTS.md` and `.codex/delegation-brief.md` before Vibe task work. Codex does
+not automatically load guidance above a Git root. For the primary checkout, the
+coordination workspace is its parent. In a linked worktree, use `git rev-parse
+--path-format=absolute --git-common-dir` to locate the primary checkout's `.git`
+directory, then its parent workspace; do not use the temporary worktree's
+parent. If the expected shared files are unavailable, report the gap before
+dependent workflow actions; do not silently substitute an older local copy.
+
+The coordination workspace owns shared lifecycle, cleanup, delegation and
+security procedures. Those instructions supersede older Vibe procedure copies in
+this repository and linked workflow pages. Repository-specific product rules,
+tests, documentation ownership, publication authority and explicit user
+constraints remain binding. Read this checkout's `.codex/vibe-workflow.toml` for
+its own preferences and opt-outs. Inheritance does not enable worker selection
+or local model routing, copy workspace settings, approve hooks, or change
+model/provider/authentication. Keep hook commands and scripts local. Resolve
+declarations from the guard's actual harness root: standalone repository chats
+keep their own declaration root; workspace chats use the coordination workspace
+guard's root. Shared policy is not shared runtime ownership. Preserve running
+workers and other tasks' worktrees.
+
 ## Codex development workflow
 
 Use the [Codex setup and validation guide](docs/codex-workflow.md) for native
