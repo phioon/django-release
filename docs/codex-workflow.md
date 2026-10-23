@@ -22,10 +22,10 @@ If `.codex/config.toml` does not exist, copy `.codex/config.example.toml` to it.
 Otherwise merge the supported agents settings after reviewing the existing file;
 keep an explicit positive `max_concurrent_threads_per_session` limit. The local
 configuration is ignored by Git. Its native skill selector requests disabling the
-retained legacy `project-onboarding` procedure without deleting historical files.
-Verify discovery and selection in the actual client; a disabled configuration
-entry alone does not prove suppression. Do not use that legacy procedure for new
-Vibe tasks.
+retired legacy `project-onboarding` procedure. Its files are preserved unchanged
+under `.agents/retired/project-onboarding/`, outside the discoverable skill root.
+Do not invoke or restore the retired procedure during routine setup. Verify that
+a fresh client excludes it; existing sessions may retain an older skill catalog.
 Do not overwrite custom settings or copy credentials.
 
 Review `.codex/hooks.json`, `.codex/hooks/subagents.py` and
